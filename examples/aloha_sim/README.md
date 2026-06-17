@@ -35,7 +35,7 @@ Terminal window 2:
 uv run scripts/serve_policy.py --env ALOHA_SIM
 ```
 
-## Recording and Interpreting π₀-FAST Action Tokens
+## Recording and Interpreting pi0-FAST Action Tokens
 
 This workflow runs the `pi0_fast_base` checkpoint through ALOHA sim and records, for
 every policy inference, the **raw discrete action tokens** the model generates — so you
