@@ -57,11 +57,15 @@ first 14 dims are robot-relevant.
 
 When logging is enabled, the `ExtractFASTActions` output transform
 ([src/openpi/transforms.py](../../src/openpi/transforms.py)) writes one JSON object per
-inference step to a JSONL file, containing the raw PaliGemma token IDs, the converted FAST
-token IDs, `decode_ok`/`decode_error`, the decoded action shape, and a `decoded_all_zero`
-flag. Decode failures are caught so the policy server stays alive — useful because
-`pi0_fast_base` is *not* fine-tuned for ALOHA sim and routinely emits FAST sequences that
-fail to decode (they appear as `decode_ok: false`, `decoded_all_zero: true`).
+inference to a JSONL file. **Each record is one inference call = one action chunk (a short
+series of `action_horizon` planned timesteps), not a single timestep.** A record carries a
+`record_index` (order within the run), `time_unix` / `time_iso` (wall-clock timestamp at
+the start of that record), the raw PaliGemma token IDs, the converted FAST token IDs,
+`decode_ok`/`decode_error`, the decoded action shape, `decoded_all_zero`, and — for the
+movement analyses — `decoded_actions` / `aloha_actions_14d` / `state`. Decode failures are
+caught so the policy server stays alive — useful because `pi0_fast_base` is *not* fine-tuned
+for ALOHA sim and routinely emits FAST sequences that fail to decode (they appear as
+`decode_ok: false`, `decoded_all_zero: true`).
 
 > **Prerequisite:** this uses a custom training config named `pi0_fast_aloha_sim` (added to
 > [src/openpi/training/config.py](../../src/openpi/training/config.py)) that pairs the
@@ -96,6 +100,27 @@ EOF
 ```
 
 With the `.env` in place you can skip straight to the `docker compose` command below.
+
+**Setting the simulation length.** The number of logged records is roughly
+`max_episode_steps / action_horizon` (the broker's `action_horizon` is 10), so 200 steps
+≈ 20 records; the default (0) runs a full episode (~30 records). There are two ways to set
+it, depending on how you launch:
+
+- **Docker (env var).** Set `ALOHA_MAX_EPISODE_STEPS` — it is forwarded into the runtime
+  container by [compose.yml](compose.yml) and read by [main.py](main.py). Put it in the
+  `.env` (already set to `200` there) or pass it inline for a one-off:
+
+  ```bash
+  ALOHA_MAX_EPISODE_STEPS=400 docker compose -f examples/aloha_sim/compose.yml up --build
+  ```
+
+- **Without Docker (CLI flag).** `main.py` also exposes a `--max-episode-steps` argument.
+  The Docker container's CMD is hardcoded with no args, so this flag only applies when you
+  run `main.py` directly (see the "Without Docker" section above):
+
+  ```bash
+  MUJOCO_GL=egl python examples/aloha_sim/main.py --max-episode-steps 200
+  ```
 
 **Option B — export in your shell (per session).** `export`ed variables are lost when you
 log out, so you must re-run these (and they override the `.env` if both are set):
@@ -157,12 +182,19 @@ What the flags do:
 - `--print-records N` — print compact one-line summaries for the first `N` records.
 - `--max-records N` — (optional) only process the first `N` records.
 
+Each record is identified by the `record_index` and `time_unix` / `time_iso` (UTC) that
+`ExtractFASTActions` writes — the order and wall-clock start of each inference. The tool
+uses those logged values when present (and falls back to positional index / derived ISO for
+older logs), so `--print-records` shows `Record <i> @ <time_iso>` and `records.csv` carries
+both `time_unix` and `time_iso` columns.
+
 Outputs written to `--output-dir`:
 
 - `summary.json` — aggregate stats (decode success rate, avg FAST token count, most common
   FAST tokens, failed/all-zero record indices, overall top-moving ALOHA dims).
 - `fast_tokens.txt` — the filtered FAST action-token IDs, one line per record.
-- `records.csv` — per-record table (token counts, decode flags, action/ALOHA stats).
+- `records.csv` — per-record table (`record_index`, `time_unix`, `time_iso`, token counts,
+  decode flags, action/ALOHA stats).
 - `*.png` — the plots, when `--plots` is passed.
 
 The script also prints the aggregate summary to stdout. Note: ALOHA motion statistics only

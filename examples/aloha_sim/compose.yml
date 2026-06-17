@@ -15,6 +15,10 @@ services:
     volumes:
       - $PWD:/app
       - ../../data:/data
+    environment:
+      # Optional cap on episode length; ~records = value / action_horizon(10).
+      # Set in examples/aloha_sim/.env or export it. Empty = full episode.
+      - ALOHA_MAX_EPISODE_STEPS=${ALOHA_MAX_EPISODE_STEPS:-}
 
   openpi_server:
     image: openpi_server

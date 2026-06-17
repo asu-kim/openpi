@@ -342,17 +342,23 @@ def process_record(index: int, record: dict,
     trimmed = trim_raw_tokens(raw_tokens)
     fast_tokens = extract_fast_action_tokens(trimmed)
 
-    # Timestamp parsing (graceful).
+    # Prefer the index/timestamps written by ExtractFASTActions (the order of
+    # inference calls within the run); fall back to positional / derived values for
+    # older logs that predate those fields.
+    record_index = record.get("record_index")
+    if not isinstance(record_index, int):
+        record_index = index
+
     ts = record.get("time_unix")
-    iso = None
-    if isinstance(ts, (int, float)):
+    iso = record.get("time_iso")
+    if not iso and isinstance(ts, (int, float)):
         try:
             iso = datetime.fromtimestamp(float(ts), tz=timezone.utc).isoformat()
         except (OverflowError, OSError, ValueError):
             iso = None
 
     out: dict = {
-        "record_index": index,
+        "record_index": record_index,
         "time_unix": ts if isinstance(ts, (int, float)) else None,
         "time_iso": iso,
         "decode_ok": bool(record.get("decode_ok", False)),
@@ -421,7 +427,8 @@ def compact_summary_line(rec: dict) -> str:
     'Record 12: valid decode, 43 FAST tokens, action shape 32x32, ALOHA dims 3, 7, 12 have largest motion.'
     """
     status = "valid decode" if rec["decode_ok"] else "FAILED decode"
-    parts = [f"Record {rec['record_index']}: {status}",
+    when = f" @ {rec['time_iso']}" if rec["time_iso"] else ""
+    parts = [f"Record {rec['record_index']}{when}: {status}",
              f"{rec['fast_action_token_count']} FAST tokens"]
     if rec["action_shape"]:
         parts.append("action shape " + "x".join(str(d) for d in rec["action_shape"]))
@@ -480,7 +487,7 @@ def write_fast_tokens_txt(path: str, processed: list[dict]) -> None:
 def write_records_csv(path: str, processed: list[dict]) -> None:
     """Write one row per record. Uses pandas if available, else the csv module."""
     columns = [
-        "record_index", "time_unix", "decode_ok", "raw_token_count",
+        "record_index", "time_unix", "time_iso", "decode_ok", "raw_token_count",
         "trimmed_token_count", "fast_action_token_count", "decoded_all_zero",
         "action_shape", "action_min", "action_max", "action_mean", "action_std",
         "aloha_min", "aloha_max", "aloha_mean", "aloha_std",
@@ -491,6 +498,7 @@ def write_records_csv(path: str, processed: list[dict]) -> None:
         return {
             "record_index": rec["record_index"],
             "time_unix": rec["time_unix"],
+            "time_iso": rec["time_iso"],
             "decode_ok": rec["decode_ok"],
             "raw_token_count": rec["raw_token_count"],
             "trimmed_token_count": rec["trimmed_token_count"],
@@ -657,6 +665,27 @@ def print_aggregate(summary: dict) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Shared per-record formatting
+# ---------------------------------------------------------------------------
+def short_time(rec: dict) -> str:
+    """Compact per-record timestamp for dense tables: 'HH:MM:SS.mmm' (millisecond
+    precision) from time_iso, falling back to the raw unix time, or '?' if neither
+    is present. The full timestamp is available via --print-records and records.csv."""
+    iso = rec.get("time_iso")
+    if iso and "T" in iso:
+        t = iso.split("T", 1)[1]  # e.g. "18:40:20.239311+00:00"
+        for tz in ("+", "Z"):     # drop timezone suffix
+            t = t.split(tz, 1)[0]
+        if "." in t:              # keep milliseconds (3 fractional digits)
+            hms, frac = t.split(".", 1)
+            return f"{hms}.{frac[:3]}"
+        return t
+    if rec.get("time_unix") is not None:
+        return f"{rec['time_unix']:.3f}"
+    return "?"
+
+
+# ---------------------------------------------------------------------------
 # Analysis 1 output: token-only motion proxy
 # ---------------------------------------------------------------------------
 def write_token_motion_csv(path: str, processed: list[dict]) -> None:
@@ -706,7 +735,7 @@ def print_token_motion(processed: list[dict], n_print: int) -> None:
     for rec in processed[:shown]:
         tm = rec["token_motion"]
         flag = "" if rec["decode_ok"] else "  [decode failed]"
-        print(f"Record {rec['record_index']:>3}: {tm['motion_label']:<6} "
+        print(f"Record {rec['record_index']:>3} @ {short_time(rec)}: {tm['motion_label']:<6} "
               f"proxy={tm['motion_proxy']:.2f}  "
               f"unique={tm['unique_tokens']:>3}/{tm['token_count']:<3} "
               f"({tm['unique_ratio']:.2f})  "
@@ -798,7 +827,7 @@ def print_joint_motion(processed: list[dict], n_print: int) -> None:
             tops = ", ".join(f"{j['name']}({j['peak_to_peak']:.3f})" for j in jm["top_moving_joints"]
                              if j["peak_to_peak"] > thr)
             desc = f"{jm['num_moving_joints']} joints moving; top: {tops}"
-        print(f"Record {rec['record_index']:>3}: {desc}")
+        print(f"Record {rec['record_index']:>3} @ {short_time(rec)}: {desc}")
         print(f"           moving timesteps {jm['num_moving_timesteps']}/{jm['num_timesteps']-1}, "
               f"step delta mean {jm['step_delta_mean']:.4f} max {jm['step_delta_max']:.4f}")
     if shown:

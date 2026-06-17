@@ -3,6 +3,7 @@ import dataclasses
 import re
 from typing import Protocol, TypeAlias, TypeVar, runtime_checkable
 
+import datetime
 import json
 import os
 import time
@@ -315,6 +316,10 @@ class TokenizeFASTInputs(DataTransformFn):
 # _ProtocolMeta, which forbids setattr on the class object.
 _FAST_TOKEN_LOG_ANNOUNCED = False
 
+# Monotonic per-process counter so each logged record carries an explicit index
+# (the order of inference calls within the run / episode).
+_FAST_RECORD_INDEX = 0
+
 
 @dataclasses.dataclass(frozen=True)
 class ExtractFASTActions(DataTransformFn):
@@ -339,8 +344,18 @@ class ExtractFASTActions(DataTransformFn):
         fast_skip_tokens = 128
         fast_token_ids = vocab_size - 1 - fast_skip_tokens - tokens
 
+        # Per-record index + timestamps. This transform runs immediately after
+        # inference, so `now` marks the beginning of this record (one inference =
+        # one action chunk = a short series of movements).
+        global _FAST_RECORD_INDEX
+        record_index = _FAST_RECORD_INDEX
+        _FAST_RECORD_INDEX += 1
+        now = time.time()
+
         record = {
-            "time_unix": time.time(),
+            "record_index": record_index,
+            "time_unix": now,
+            "time_iso": datetime.datetime.fromtimestamp(now, datetime.timezone.utc).isoformat(),
             "action_horizon": int(self.action_horizon),
             "action_dim": int(self.action_dim),
             "raw_paligemma_token_ids": tokens.tolist(),
