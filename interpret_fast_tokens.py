@@ -35,7 +35,7 @@ import json
 import math
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import datetime
 
 import numpy as np
 
@@ -349,13 +349,18 @@ def process_record(index: int, record: dict,
     if not isinstance(record_index, int):
         record_index = index
 
+    # Display timestamps in LOCAL time. time_unix is the authoritative epoch value, so we
+    # convert it to local time here regardless of the timezone the log's time_iso used;
+    # fall back to the logged time_iso only if time_unix is missing.
     ts = record.get("time_unix")
-    iso = record.get("time_iso")
-    if not iso and isinstance(ts, (int, float)):
+    iso = None
+    if isinstance(ts, (int, float)):
         try:
-            iso = datetime.fromtimestamp(float(ts), tz=timezone.utc).isoformat()
+            iso = datetime.fromtimestamp(float(ts)).astimezone().isoformat()
         except (OverflowError, OSError, ValueError):
             iso = None
+    if iso is None:
+        iso = record.get("time_iso")
 
     out: dict = {
         "record_index": record_index,
@@ -673,9 +678,15 @@ def short_time(rec: dict) -> str:
     is present. The full timestamp is available via --print-records and records.csv."""
     iso = rec.get("time_iso")
     if iso and "T" in iso:
-        t = iso.split("T", 1)[1]  # e.g. "18:40:20.239311+00:00"
-        for tz in ("+", "Z"):     # drop timezone suffix
-            t = t.split(tz, 1)[0]
+        t = iso.split("T", 1)[1]  # e.g. "18:40:20.239311-07:00"
+        # Strip the trailing timezone designator (Z, +HH:MM, or -HH:MM). A '-' in the
+        # time-of-day can only be a tz offset, so rsplit is safe.
+        if t.endswith("Z"):
+            t = t[:-1]
+        elif "+" in t:
+            t = t.rsplit("+", 1)[0]
+        elif "-" in t:
+            t = t.rsplit("-", 1)[0]
         if "." in t:              # keep milliseconds (3 fractional digits)
             hms, frac = t.split(".", 1)
             return f"{hms}.{frac[:3]}"

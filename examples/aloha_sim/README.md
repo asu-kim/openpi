@@ -35,11 +35,31 @@ Terminal window 2:
 uv run scripts/serve_policy.py --env ALOHA_SIM
 ```
 
-## Recording and interpreting π₀-FAST action tokens
+## Recording and Interpreting π₀-FAST Action Tokens
 
 This workflow runs the `pi0_fast_base` checkpoint through ALOHA sim and records, for
 every policy inference, the **raw discrete action tokens** the model generates — so you
 can inspect what π₀-FAST actually emits before (and after) FAST decoding.
+
+### Quick Workflow
+
+Run a single run of simulation.
+
+```
+cd ~/openpi
+docker compose -f examples/aloha_sim/compose.yml up --build
+```
+
+Review interpreted FAST tokens for the latest simulation run.
+
+```
+LATEST_LOG=$(ls -t data/aloha_sim/token_logs/*.jsonl | head -1)
+wc -l "$LATEST_LOG"
+uv run python interpret_fast_tokens.py --input "$LATEST_LOG" \
+  --output-dir interpreted_tokens --token-motion --joint-motion --per-timestep \
+  --print-records 30 --motion-print 30 --csv
+
+```
 
 ### What it does
 
@@ -101,25 +121,37 @@ EOF
 
 With the `.env` in place you can skip straight to the `docker compose` command below.
 
-**Setting the simulation length.** The number of logged records is roughly
-`max_episode_steps / action_horizon` (the broker's `action_horizon` is 10), so 200 steps
-≈ 20 records; the default (0) runs a full episode (~30 records). There are two ways to set
-it, depending on how you launch:
+**Setting the simulation length.** By default this runs a **single 300-step episode**
+(~30 records, since the policy re-infers once per `action_horizon`=10 steps), matching the
+gym ALOHA task's designed `TimeLimit`. The provided `.env` sets `ALOHA_MAX_EPISODE_STEPS=300`
+and `ALOHA_NUM_EPISODES=1` for exactly this.
 
-- **Docker (env var).** Set `ALOHA_MAX_EPISODE_STEPS` — it is forwarded into the runtime
-  container by [compose.yml](compose.yml) and read by [main.py](main.py). Put it in the
-  `.env` (already set to `200` there) or pass it inline for a one-off:
+Two knobs adjust it. `ALOHA_MAX_EPISODE_STEPS` **overrides** the gym `TimeLimit` (via
+`gymnasium.make`), so it can shorten or extend an episode. `ALOHA_NUM_EPISODES` runs several
+episodes back-to-back, each from a fresh (re-seeded) start, with records numbered
+continuously and pooled into one log. If you want more records, prefer adding episodes over
+lengthening a single one: the cube-transfer task is designed for ~300 steps, and pushing a
+single episode well past that drives the (un-fine-tuned) policy into out-of-distribution,
+degenerate states, so the tail records become low-quality.
+
+There are two ways to set these, depending on how you launch:
+
+- **Docker (env vars).** `ALOHA_MAX_EPISODE_STEPS` and `ALOHA_NUM_EPISODES` are forwarded
+  into the runtime container by [compose.yml](compose.yml) and read by [main.py](main.py).
+  Put them in the `.env` (set to `300` and `1` there → a single ~30-record episode) or pass
+  inline for a one-off (e.g. several episodes pooled into one log):
 
   ```bash
-  ALOHA_MAX_EPISODE_STEPS=400 docker compose -f examples/aloha_sim/compose.yml up --build
+  ALOHA_MAX_EPISODE_STEPS=300 ALOHA_NUM_EPISODES=3 \
+    docker compose -f examples/aloha_sim/compose.yml up --build   # ~90 records, 3 episodes
   ```
 
-- **Without Docker (CLI flag).** `main.py` also exposes a `--max-episode-steps` argument.
-  The Docker container's CMD is hardcoded with no args, so this flag only applies when you
-  run `main.py` directly (see the "Without Docker" section above):
+- **Without Docker (CLI flags).** `main.py` also exposes `--max-episode-steps` and
+  `--num-episodes`. The Docker container's CMD is hardcoded with no args, so these apply
+  only when you run `main.py` directly (see the "Without Docker" section above):
 
   ```bash
-  MUJOCO_GL=egl python examples/aloha_sim/main.py --max-episode-steps 200
+  MUJOCO_GL=egl python examples/aloha_sim/main.py --max-episode-steps 300 --num-episodes 2
   ```
 
 **Option B — export in your shell (per session).** `export`ed variables are lost when you
@@ -137,37 +169,51 @@ echo "OPENPI_FAST_TOKEN_LOG=$OPENPI_FAST_TOKEN_LOG"
 **Then build and run:**
 
 ```bash
-# Start fresh — the log is opened in append mode, so remove any previous run's file.
-rm -f data/aloha_sim/token_logs/pi0_fast_tokens.jsonl
-
-# Build and run. The server prints "[OPENPI_FAST_TOKEN_LOG] active -> ..." on the first
-# decode, confirming the logger is wired up. The episode runs to completion even when
-# FAST decoding fails, and the video is saved to data/aloha_sim/videos/out_*.mp4.
+# Build and run. The server prints "[OPENPI_FAST_TOKEN_LOG] active -> <file>" on the first
+# decode, confirming the logger is wired up and showing the exact file written. The episode
+# runs to completion even when FAST decoding fails, and the video is saved with a local-time
+# suffix to data/aloha_sim/videos/out_YYYY-MM-DD-HH-MM-SS.mp4.
 docker compose -f examples/aloha_sim/compose.yml up --build
 ```
+
+**Each run writes its own file.** The base path in `OPENPI_FAST_TOKEN_LOG` gets a
+per-run local-time suffix inserted before the extension, e.g.
+`pi0_fast_tokens_2026-06-17-18-40-20.jsonl`, and the episode video uses the same suffix
+format, e.g. `out_2026-06-17-18-40-20.mp4`. So runs never clobber or append to each other
+and there is nothing to delete between runs — the server log line prints the exact
+filename. The commands below pick the most recent log automatically. (The video and log
+suffixes share the same format but come from different containers' clocks, so they will be
+close but not identical to the second.)
 
 ### 2. Quick sanity check on the log
 
 ```bash
-# How many steps were logged.
-wc -l data/aloha_sim/token_logs/pi0_fast_tokens.jsonl
+# Grab the most recent token log (each run is timestamped).
+LATEST_LOG=$(ls -t data/aloha_sim/token_logs/*.jsonl | head -1)
+echo "Using $LATEST_LOG"
+
+# How many records were logged.
+wc -l "$LATEST_LOG"
 
 # Count genuine decode successes vs. failures.
-grep -o '"decode_ok": [a-z]*' data/aloha_sim/token_logs/pi0_fast_tokens.jsonl | sort | uniq -c
+grep -o '"decode_ok": [a-z]*' "$LATEST_LOG" | sort | uniq -c
 
 # Count steps whose decoded actions were an all-zero fallback (i.e. FAST decode failed
 # internally and returned zeros of the correct shape).
-grep -o '"decoded_all_zero": [a-z]*' data/aloha_sim/token_logs/pi0_fast_tokens.jsonl | sort | uniq -c
+grep -o '"decoded_all_zero": [a-z]*' "$LATEST_LOG" | sort | uniq -c
 ```
 
 ### 3. Produce human-readable summaries
 
 [interpret_fast_tokens.py](../../interpret_fast_tokens.py) reads the JSONL and emits
-per-record and aggregate summaries plus optional CSV/plots.
+per-record and aggregate summaries plus optional CSV/plots. The commands below reuse the
+`$LATEST_LOG` set in step 2 (re-run that one line in a new shell, or point `--input` at a
+specific timestamped file).
 
 ```bash
+LATEST_LOG=$(ls -t data/aloha_sim/token_logs/*.jsonl | head -1)   # most recent run
 uv run python interpret_fast_tokens.py \
-  --input data/aloha_sim/token_logs/pi0_fast_tokens.jsonl \
+  --input "$LATEST_LOG" \
   --output-dir interpreted_tokens --csv --plots --print-records 5
 ```
 
@@ -241,7 +287,7 @@ when decoding fails.
 
 ```bash
 uv run python interpret_fast_tokens.py \
-  --input data/aloha_sim/token_logs/pi0_fast_tokens.jsonl \
+  --input "$LATEST_LOG" \
   --token-motion --motion-print 10
 ```
 
@@ -262,7 +308,7 @@ shows which joints move most often across the run.
 
 ```bash
 uv run python interpret_fast_tokens.py \
-  --input data/aloha_sim/token_logs/pi0_fast_tokens.jsonl \
+  --input "$LATEST_LOG" \
   --joint-motion --joint-move-threshold 0.02 --motion-print 10
 ```
 
@@ -281,7 +327,7 @@ Analysis 2.
 
 ```bash
 uv run python interpret_fast_tokens.py \
-  --input data/aloha_sim/token_logs/pi0_fast_tokens.jsonl \
+  --input "$LATEST_LOG" \
   --joint-motion --per-timestep --joint-move-threshold 0.01
 ```
 

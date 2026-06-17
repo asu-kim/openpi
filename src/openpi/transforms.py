@@ -320,6 +320,29 @@ _FAST_TOKEN_LOG_ANNOUNCED = False
 # (the order of inference calls within the run / episode).
 _FAST_RECORD_INDEX = 0
 
+# Resolved token-log path for this process. OPENPI_FAST_TOKEN_LOG gives the base path;
+# we insert a per-run timestamp suffix so each run writes its own file (no need to delete
+# the previous run's log). Computed once, on first use.
+_FAST_TOKEN_LOG_PATH = None
+
+
+def _resolve_fast_token_log_path() -> str | None:
+    """Resolve OPENPI_FAST_TOKEN_LOG into a unique, timestamped path for this run.
+
+    e.g. .../pi0_fast_tokens.jsonl -> .../pi0_fast_tokens_2026-06-17-18-40-20.jsonl
+    Returns None if OPENPI_FAST_TOKEN_LOG is unset/empty. The result is cached so every
+    record in a run appends to the same file.
+    """
+    base = os.environ.get("OPENPI_FAST_TOKEN_LOG")
+    if not base:
+        return None
+    global _FAST_TOKEN_LOG_PATH
+    if _FAST_TOKEN_LOG_PATH is None:
+        stem, ext = os.path.splitext(base)
+        ts = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+        _FAST_TOKEN_LOG_PATH = f"{stem}_{ts}{ext or '.jsonl'}"
+    return _FAST_TOKEN_LOG_PATH
+
 
 @dataclasses.dataclass(frozen=True)
 class ExtractFASTActions(DataTransformFn):
@@ -355,7 +378,8 @@ class ExtractFASTActions(DataTransformFn):
         record = {
             "record_index": record_index,
             "time_unix": now,
-            "time_iso": datetime.datetime.fromtimestamp(now, datetime.timezone.utc).isoformat(),
+            # Local time (with UTC offset), consistent with the log file's timestamp suffix.
+            "time_iso": datetime.datetime.fromtimestamp(now).astimezone().isoformat(),
             "action_horizon": int(self.action_horizon),
             "action_dim": int(self.action_dim),
             "raw_paligemma_token_ids": tokens.tolist(),
@@ -420,8 +444,8 @@ class ExtractFASTActions(DataTransformFn):
         if "state" in data:
             record["state"] = np.asarray(data["state"], dtype=np.float32).reshape(-1).tolist()
 
-        # Optional JSONL logging.
-        token_log_path = os.environ.get("OPENPI_FAST_TOKEN_LOG")
+        # Optional JSONL logging. Each run writes its own timestamped file.
+        token_log_path = _resolve_fast_token_log_path()
         if token_log_path:
             global _FAST_TOKEN_LOG_ANNOUNCED
             if not _FAST_TOKEN_LOG_ANNOUNCED:
