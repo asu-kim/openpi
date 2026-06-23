@@ -1,5 +1,9 @@
 # Run Aloha Sim
 
+## Prerequisites
+
+Before running the following examples, make sure to follow the [openpi general installation instructions](../../README.md#installation). These instructions include checking out all submodules recursively, installing [uv](https://docs.astral.sh/uv/), and setting up the environment variable `GIT_LFS_SKIP_SMUDGE`.
+
 ## With Docker
 
 ```bash
