@@ -23,25 +23,27 @@ except ImportError as e:
 
 def wait_for_new_file(log_dir):
     """
-    Deletes existing .jsonl files in the directory and waits for a new one to be created.
+    Records the timestamp of the newest existing log file and waits for a newer one.
     """
-    print(f"Cleaning up old log files in {log_dir}...")
+    print(f"Scanning existing log files in {log_dir}...")
     existing_files = glob.glob(os.path.join(log_dir, "*.jsonl"))
-    for f in existing_files:
-        try:
-            os.remove(f)
-            print(f"  Deleted old log: {f}")
-        except Exception as e:
-            print(f"  Warning: Could not delete {f}: {e}")
+    
+    latest_time = 0
+    if existing_files:
+        latest_file = max(existing_files, key=os.path.getctime)
+        latest_time = os.path.getctime(latest_file)
+        print(f"  Found {len(existing_files)} existing logs. The latest is from {time.ctime(latest_time)}. Waiting for a newer one...")
+    else:
+        print("  No existing logs found. Waiting for the first one...")
             
-    print(f"Waiting for the simulation to start and create a new log file...")
     while True:
-        new_files = glob.glob(os.path.join(log_dir, "*.jsonl"))
-        if new_files:
-            # Sort by creation time just in case, grab the newest
-            latest_file = max(new_files, key=os.path.getctime)
-            print(f"Detected new log file: {latest_file}")
-            return latest_file
+        current_files = glob.glob(os.path.join(log_dir, "*.jsonl"))
+        if current_files:
+            newest_current = max(current_files, key=os.path.getctime)
+            if os.path.getctime(newest_current) > latest_time:
+                print(f"Detected new log file: {newest_current}")
+                return newest_current
+            
         time.sleep(1)
 
 
