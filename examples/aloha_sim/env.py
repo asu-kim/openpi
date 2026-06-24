@@ -9,11 +9,23 @@ from typing_extensions import override
 class AlohaSimEnvironment(_environment.Environment):
     """An environment for an Aloha robot in simulation."""
 
-    def __init__(self, task: str, obs_type: str = "pixels_agent_pos", seed: int = 0) -> None:
+    def __init__(
+        self,
+        task: str,
+        obs_type: str = "pixels_agent_pos",
+        seed: int = 0,
+        max_episode_steps: int = 0,
+    ) -> None:
         np.random.seed(seed)
         self._rng = np.random.default_rng(seed)
 
-        self._gym = gymnasium.make(task, obs_type=obs_type)
+        # The gym ALOHA task registers a default TimeLimit of 300 steps. Passing
+        # max_episode_steps to gymnasium.make overrides it, which is required to run
+        # past 300 steps (e.g. for more logged records). 0 keeps the registered default.
+        make_kwargs = {"obs_type": obs_type}
+        if max_episode_steps and max_episode_steps > 0:
+            make_kwargs["max_episode_steps"] = max_episode_steps
+        self._gym = gymnasium.make(task, **make_kwargs)
 
         self._last_obs = None
         self._done = True

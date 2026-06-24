@@ -1,3 +1,4 @@
+import datetime
 import logging
 import pathlib
 
@@ -28,9 +29,15 @@ class VideoSaver(_subscriber.Subscriber):
 
     @override
     def on_episode_end(self) -> None:
-        existing = list(self._out_dir.glob("out_[0-9]*.mp4"))
-        next_idx = max([int(p.stem.split("_")[1]) for p in existing], default=-1) + 1
-        out_path = self._out_dir / f"out_{next_idx}.mp4"
+        # Local-time suffix, matching the FAST token-log filename format
+        # (YYYY-MM-DD-HH-MM-SS), so each run/episode writes its own video.
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+        out_path = self._out_dir / f"out_{timestamp}.mp4"
+        # Disambiguate if multiple episodes finish within the same second.
+        dedup = 1
+        while out_path.exists():
+            out_path = self._out_dir / f"out_{timestamp}_{dedup}.mp4"
+            dedup += 1
 
         logging.info(f"Saving video to {out_path}")
         imageio.mimwrite(

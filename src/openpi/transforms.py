@@ -3,6 +3,11 @@ import dataclasses
 import re
 from typing import Protocol, TypeAlias, TypeVar, runtime_checkable
 
+import datetime
+import json
+import os
+import time
+
 import flax.traverse_util as traverse_util
 import jax
 import numpy as np
@@ -175,9 +180,28 @@ class Unnormalize(DataTransformFn):
     def _unnormalize_quantile(self, x, stats: NormStats):
         assert stats.q01 is not None
         assert stats.q99 is not None
+
         q01, q99 = stats.q01, stats.q99
-        if (dim := q01.shape[-1]) < x.shape[-1]:
-            return np.concatenate([(x[..., :dim] + 1.0) / 2.0 * (q99 - q01 + 1e-6) + q01, x[..., dim:]], axis=-1)
+        stat_dim = q01.shape[-1]
+        x_dim = x.shape[-1]
+
+        # Case 1: stats are shorter than x. Unnormalize covered dims and keep
+        # remaining x dims unchanged.
+        if stat_dim < x_dim:
+            return np.concatenate(
+                [
+                    (x[..., :stat_dim] + 1.0) / 2.0 * (q99 - q01 + 1e-6) + q01,
+                    x[..., stat_dim:],
+                ],
+                axis=-1,
+            )
+
+        # Case 2: stats are longer than x. This happens when an ALOHA transform
+        # or FAST fallback produces 14D actions but the base/trossen stats are 32D.
+        if stat_dim > x_dim:
+            q01 = q01[..., :x_dim]
+            q99 = q99[..., :x_dim]
+
         return (x + 1.0) / 2.0 * (q99 - q01 + 1e-6) + q01
 
 
@@ -287,6 +311,38 @@ class TokenizeFASTInputs(DataTransformFn):
             "token_loss_mask": loss_mask,
         }
 
+# Module-level flag so the "logging active" message prints only once per process.
+# Lives at module scope (not on the class) because ExtractFASTActions's metaclass is
+# _ProtocolMeta, which forbids setattr on the class object.
+_FAST_TOKEN_LOG_ANNOUNCED = False
+
+# Monotonic per-process counter so each logged record carries an explicit index
+# (the order of inference calls within the run / episode).
+_FAST_RECORD_INDEX = 0
+
+# Resolved token-log path for this process. OPENPI_FAST_TOKEN_LOG gives the base path;
+# we insert a per-run timestamp suffix so each run writes its own file (no need to delete
+# the previous run's log). Computed once, on first use.
+_FAST_TOKEN_LOG_PATH = None
+
+
+def _resolve_fast_token_log_path() -> str | None:
+    """Resolve OPENPI_FAST_TOKEN_LOG into a unique, timestamped path for this run.
+
+    e.g. .../pi0_fast_tokens.jsonl -> .../pi0_fast_tokens_2026-06-17-18-40-20.jsonl
+    Returns None if OPENPI_FAST_TOKEN_LOG is unset/empty. The result is cached so every
+    record in a run appends to the same file.
+    """
+    base = os.environ.get("OPENPI_FAST_TOKEN_LOG")
+    if not base:
+        return None
+    global _FAST_TOKEN_LOG_PATH
+    if _FAST_TOKEN_LOG_PATH is None:
+        stem, ext = os.path.splitext(base)
+        ts = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+        _FAST_TOKEN_LOG_PATH = f"{stem}_{ts}{ext or '.jsonl'}"
+    return _FAST_TOKEN_LOG_PATH
+
 
 @dataclasses.dataclass(frozen=True)
 class ExtractFASTActions(DataTransformFn):
@@ -297,14 +353,116 @@ class ExtractFASTActions(DataTransformFn):
     def __call__(self, data: DataDict) -> DataDict:
         if "actions" not in data:
             return data
-        # Model outputs are saved in "actions", but for FAST models they represent tokens.
-        tokens = data.pop("actions")
-        actions = self.tokenizer.extract_actions(tokens.astype(np.int32), self.action_horizon, self.action_dim)
+
+        # Model outputs are saved in "actions", but for FAST models they represent
+        # generated PaliGemma token IDs, not continuous actions yet.
+        tokens = data.pop("actions").astype(np.int32)
+
+        # Convert raw PaliGemma vocab IDs back to FAST action-token IDs.
+        # Mirrors FASTTokenizer._act_tokens_to_paligemma_tokens (it's its own inverse):
+        #   fast_id = vocab_size - 1 - fast_skip_tokens - paligemma_id
+        # NOTE: this is applied to the *entire* generated sequence, including the
+        # "Action:"/"|" text tokens, so non-action positions will be meaningless.
+        vocab_size = 257152
+        fast_skip_tokens = 128
+        fast_token_ids = vocab_size - 1 - fast_skip_tokens - tokens
+
+        # Per-record index + timestamps. This transform runs immediately after
+        # inference, so `now` marks the beginning of this record (one inference =
+        # one action chunk = a short series of movements).
+        global _FAST_RECORD_INDEX
+        record_index = _FAST_RECORD_INDEX
+        _FAST_RECORD_INDEX += 1
+        now = time.time()
+
+        record = {
+            "record_index": record_index,
+            "time_unix": now,
+            # Local time (with UTC offset), consistent with the log file's timestamp suffix.
+            "time_iso": datetime.datetime.fromtimestamp(now).astimezone().isoformat(),
+            "action_horizon": int(self.action_horizon),
+            "action_dim": int(self.action_dim),
+            "raw_paligemma_token_ids": tokens.tolist(),
+            "fast_action_token_ids": fast_token_ids.tolist(),
+            "decode_ok": True,
+            "decode_error": None,
+        }
+
+        try:
+            actions = self.tokenizer.extract_actions(
+                tokens,
+                self.action_horizon,
+                self.action_dim,
+            )
+
+            actions = np.asarray(actions, dtype=np.float32)
+
+            # Some FAST decode failures do not raise; they print an error and return
+            # an incorrectly shaped fallback. Catch that here before unnormalization.
+            expected_shape = (self.action_horizon, self.action_dim)
+            if actions.shape != expected_shape:
+                raise ValueError(
+                    f"FAST decoded actions had shape {actions.shape}, "
+                    f"expected {expected_shape}"
+                )
+
+            record["decoded_actions_shape"] = list(actions.shape)
+
+            # The HF FAST tokenizer swallows internal reshape failures, prints
+            # "Error decoding tokens: ...", and returns an all-zero fallback of the
+            # *correct* shape. So a correct shape alone does not mean success.
+            # Treat an all-zero result as a (likely) failed decode.
+            record["decoded_all_zero"] = not bool(np.any(actions))
+            if record["decoded_all_zero"]:
+                record["decode_ok"] = False
+                record["decode_error"] = (
+                    "FAST decode returned all-zero fallback (internal reshape failure; "
+                    "see server 'Error decoding tokens' log)"
+                )
+
+        except Exception as e:
+            record["decode_ok"] = False
+            record["decode_error"] = repr(e)
+
+            # Keep the policy server alive. This lets you record generated tokens even
+            # when pi0_fast_base emits invalid FAST action sequences.
+            actions = np.zeros(
+                (self.action_horizon, self.action_dim),
+                dtype=np.float32,
+            )
+            record["decoded_actions_shape"] = list(actions.shape)
+
+        # Record the decoded continuous actions so downstream tooling
+        # (interpret_fast_tokens.py --joint-motion / --per-timestep) can analyze
+        # per-joint, per-timestep movement.
+        # NOTE: these are model-space (normalized) values captured *before* the
+        # downstream Unnormalize / AlohaOutputs transforms. Motion (variation across
+        # timesteps) is still meaningful here, just expressed in normalized units.
+        aloha_relevant_dims = 14  # ALOHA: 2 arms x (6 joints + 1 gripper)
+        record["decoded_actions"] = actions.tolist()
+        record["aloha_actions_14d"] = actions[:, :aloha_relevant_dims].tolist()
+        if "state" in data:
+            record["state"] = np.asarray(data["state"], dtype=np.float32).reshape(-1).tolist()
+
+        # Optional JSONL logging. Each run writes its own timestamped file.
+        token_log_path = _resolve_fast_token_log_path()
+        if token_log_path:
+            global _FAST_TOKEN_LOG_ANNOUNCED
+            if not _FAST_TOKEN_LOG_ANNOUNCED:
+                print(
+                    f"[OPENPI_FAST_TOKEN_LOG] active -> writing FAST token records to {token_log_path}",
+                    flush=True,
+                )
+                _FAST_TOKEN_LOG_ANNOUNCED = True
+            os.makedirs(os.path.dirname(os.path.abspath(token_log_path)), exist_ok=True)
+            with open(token_log_path, "a") as f:
+                f.write(json.dumps(record) + "\n")
+                f.flush()
+
         return {
             **data,
             "actions": actions,
         }
-
 
 @dataclasses.dataclass(frozen=True)
 class PromptFromLeRobotTask(DataTransformFn):
