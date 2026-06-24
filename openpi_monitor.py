@@ -44,11 +44,11 @@ def wait_for_new_file(log_dir):
                 print(f"Detected new log file: {newest_current}")
                 return newest_current
             
-        time.sleep(1)
+        time.sleep(0.1)
 
 
 def tail_log_file(file_path):
-    """
+    """ 
     Tails a log file (similar to `tail -f`) and yields new lines as they are written.
     """
     if not os.path.exists(file_path):

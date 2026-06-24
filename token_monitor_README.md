@@ -24,6 +24,11 @@ This mode completely automates the process. It will automatically find the log d
 ```bash
 uv run python openpi_monitor.py
 ```
+if you have permission error for ~/.cache file use :
+
+```bash
+UV_CACHE_DIR=~/my_uv_cache uv run python openpi_monitor.py
+```
 
 ### Mode B: Offline Testing
 If you already have a `.jsonl` file and just want to process it instantly without deleting it or waiting for Docker:
@@ -31,6 +36,15 @@ If you already have a `.jsonl` file and just want to process it instantly withou
 ```bash
 LATEST_LOG=$(ls -t data/aloha_sim/token_logs/*.jsonl | head -1)
 uv run python openpi_monitor.py --log-file "$LATEST_LOG"
+```
+
+if you have permission error for ~/.cache file use :
+
+```bash
+LATEST_LOG=$(ls -t data/aloha_sim/token_logs/*.jsonl | head -1)
+```
+```bash
+UV_CACHE_DIR=~/my_uv_cache uv run python openpi_monitor.py --log-file "$LATEST_LOG"
 ```
 
 ## IoTAuth Integration
