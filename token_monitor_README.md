@@ -9,31 +9,29 @@ You do **not** need to manually activate a virtual environment if you use `uv ru
 Because this script imports logic directly from `openpi` (like `numpy` and `interpret_fast_tokens.py`), running it with `uv run python openpi_monitor.py` automatically uses the `openpi` project's virtual environment and handles all dependencies for you.
 
 ### 2. Does Docker need to be running?
-- **For Testing (Offline):** **No.** If you just want to test the script against a `.jsonl` log file from a past simulation, Docker does not need to be running. The script simply reads the existing text file and calculates the scores.
-- **For Live Monitoring (Online):** **Yes.** If you want the script to monitor the robot live, you must have the ALOHA simulation running via `docker compose` so that the simulation can actively write new tokens to the log file.
+- **For Testing (Offline):** **No.** If you just want to test the script against an existing log file from a past simulation, Docker does not need to be running.
+- **For Live Monitoring (Online):** **Yes.** If you want the script to monitor the robot live, you must have the ALOHA simulation running via `docker compose`.
 
 ## Usage
 
-### 1. Find your target log file
-The simulation logs raw tokens to the `data/aloha_sim/token_logs/` directory.
+The script defaults to "Live Demo" mode, but you can override it using `--log-file` for offline testing.
 
-You can automatically grab the most recent log file using this command:
+*(Note: If you have permission errors with your cache, prepend `UV_CACHE_DIR=~/my_uv_cache` before `uv run`)*
+
+### Mode A: Live Demo (Default & Recommended)
+This mode completely automates the process. It will automatically find the log directory, delete any old log files, and then patiently wait for you to start the Docker simulation. As soon as a new file is created, it begins monitoring it.
+
+```bash
+uv run python openpi_monitor.py
+```
+
+### Mode B: Offline Testing
+If you already have a `.jsonl` file and just want to process it instantly without deleting it or waiting for Docker:
+
 ```bash
 LATEST_LOG=$(ls -t data/aloha_sim/token_logs/*.jsonl | head -1)
+uv run python openpi_monitor.py --log-file "$LATEST_LOG"
 ```
 
-### 2. Run the Monitor
-Run the script using `uv run` and pass it the path to the log file:
-
-```bash
-uv run python openpi_monitor.py "$LATEST_LOG"
-```
-
-### How it works
-The script operates similarly to the `tail -f` command in Linux. 
-1. If you point it to a log file from a finished simulation, it will instantly print out the motion scores for all ~30 records and then hang, waiting indefinitely for new lines.
-2. If you point it to a log file from a *live* simulation, it will print the scores out one by one, immediately as the AI generates each new plan.
-3. Press `Ctrl+C` to stop the monitor.
-
-## Next Steps (IoTAuth Integration)
-The script currently has a placeholder for the IoTAuth integration. Once configured, the script will use the `SecureClient` to send a session key request to the Auth Server for every record, embedding the `motion_proxy` score inside the request's context.
+## IoTAuth Integration
+The script has the IoTAuth code block already built into it. Once you generate a valid `client.config` file from the Auth Server, simply open `openpi_monitor.py` and uncomment the `ctx = IoTAuthContext.from_config(...)` section to enable live network requests!
