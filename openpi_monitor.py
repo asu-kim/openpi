@@ -119,29 +119,8 @@ def main():
             print(f"[Record {record_idx:^3}] Motion Proxy: {proxy_score:.3f} ({label.upper()})")
             
             # ---------------------------------------------------------
-            # IoTAuth Integration Block
+            # We will add IoTAuth logic here ONLY after verification!
             # ---------------------------------------------------------
-            IOTAUTH_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../iotauth/entity/python"))
-            if IOTAUTH_DIR not in sys.path:
-                sys.path.append(IOTAUTH_DIR)
-                
-            try:
-                from iotauth import IoTAuthContext
-                
-                # UNCOMMENT THIS ONCE CONFIG IS GENERATED
-                # ctx = IoTAuthContext.from_config("client.config")
-                
-                context = {
-                    "motion_proxy": proxy_score,
-                    "motion_label": label
-                }
-                
-                # print(f"  -> Requesting session key for context: {context}")
-                # keys = ctx.request_session_keys(purpose=context)
-                # print(f"  -> [SUCCESS] Authorized! Received Session Key: {keys[0].key_id}")
-                
-            except Exception as e:
-                print(f"  -> [IoTAuth Warning] Code skipped or failed: {e}")
 
 
 if __name__ == "__main__":
