@@ -134,8 +134,20 @@ def main():
             try:
                 from iotauth import IoTAuthContext
                 
-                # Load context using the user-provided config file path
-                ctx = IoTAuthContext.from_config(args.config_file)
+                # To support Node generated configs (which use relative paths based on CWD),
+                # we must temporarily change our CWD to 'example_entities' if applicable.
+                abs_config_path = os.path.abspath(args.config_file)
+                expected_anchor = os.path.basename(os.path.dirname(os.path.dirname(os.path.dirname(abs_config_path))))
+                
+                original_cwd = os.getcwd()
+                if expected_anchor == 'example_entities':
+                    os.chdir(os.path.dirname(os.path.dirname(os.path.dirname(abs_config_path))))
+                
+                try:
+                    # Load context using the user-provided config file path
+                    ctx = IoTAuthContext.from_config(abs_config_path)
+                finally:
+                    os.chdir(original_cwd)
                 
                 # We use standard Auth context fields (NOT the robot's motion data)
                 # to prove to the Auth server we are allowed to communicate.
