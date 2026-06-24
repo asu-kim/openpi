@@ -92,6 +92,9 @@ def process_record(json_str):
 def main():
     parser = argparse.ArgumentParser(description="Live monitor for OpenPI FAST token logs.")
     
+    # Required argument for IoTAuth Config
+    parser.add_argument("--config-file", required=True, help="Path to the IoTAuth entity .config or .json file.")
+    
     # Optional argument for offline testing
     parser.add_argument("--log-file", help="Specific existing pi0_fast_tokens.jsonl file to read offline.")
     
@@ -121,8 +124,39 @@ def main():
             print(f"[Record {record_idx:^3}] Motion Proxy: {proxy_score:.3f} ({label.upper()})")
             
             # ---------------------------------------------------------
-            # We will add IoTAuth logic here ONLY after verification!
+            # IoTAuth Integration Block
             # ---------------------------------------------------------
+            # 1. Dynamically add the iotauth python package to our path
+            IOTAUTH_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../iotauth/entity/python"))
+            if IOTAUTH_DIR not in sys.path:
+                sys.path.append(IOTAUTH_DIR)
+                
+            try:
+                from iotauth import IoTAuthContext
+                
+                # Load context using the user-provided config file path
+                ctx = IoTAuthContext.from_config(args.config_file)
+                
+                # We use standard Auth context fields (NOT the robot's motion data)
+                # to prove to the Auth server we are allowed to communicate.
+                import datetime
+                current_time = datetime.datetime.now().strftime("%H:%M")
+                
+                purpose_payload = {
+                    "group": "Servers",
+                    "context": {
+                        "Number of People": 1,
+                        "Location": "Classroom",
+                        "Time of Day": current_time
+                    }
+                }
+                
+                print(f"  -> Requesting session key for purpose: {purpose_payload}")
+                keys = ctx.request_session_keys(purpose=purpose_payload)
+                print(f"  -> [SUCCESS] Authorized! Received Session Key: {keys[0].key_id}")
+                
+            except Exception as e:
+                print(f"  -> [IoTAuth Warning] Code skipped or failed: {e}")
 
 
 if __name__ == "__main__":
