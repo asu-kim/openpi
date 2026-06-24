@@ -22,12 +22,12 @@ The script defaults to "Live Demo" mode, but you can override it using `--log-fi
 This mode completely automates the process. It will automatically find the log directory, delete any old log files, and then patiently wait for you to start the Docker simulation. As soon as a new file is created, it begins monitoring it.
 
 ```bash
-uv run python openpi_monitor.py
+uv run python openpi_monitor.py --config-file <path_to_config>
 ```
 if you have permission error for ~/.cache file use :
 
 ```bash
-UV_CACHE_DIR=~/my_uv_cache uv run python openpi_monitor.py
+UV_CACHE_DIR=~/my_uv_cache uv run python openpi_monitor.py --config-file <path_to_config>
 ```
 
 ### Mode B: Offline Testing
@@ -35,7 +35,7 @@ If you already have a `.jsonl` file and just want to process it instantly withou
 
 ```bash
 LATEST_LOG=$(ls -t data/aloha_sim/token_logs/*.jsonl | head -1)
-uv run python openpi_monitor.py --log-file "$LATEST_LOG"
+uv run python openpi_monitor.py --config-file <path_to_config> --log-file "$LATEST_LOG"
 ```
 
 if you have permission error for ~/.cache file use :
@@ -44,7 +44,7 @@ if you have permission error for ~/.cache file use :
 LATEST_LOG=$(ls -t data/aloha_sim/token_logs/*.jsonl | head -1)
 ```
 ```bash
-UV_CACHE_DIR=~/my_uv_cache uv run python openpi_monitor.py --log-file "$LATEST_LOG"
+UV_CACHE_DIR=~/my_uv_cache uv run python openpi_monitor.py --config-file <path_to_config> --log-file "$LATEST_LOG"
 ```
 
 ## IoTAuth Integration
