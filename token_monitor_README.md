@@ -5,29 +5,35 @@ This script (`openpi_monitor.py`) acts as a live background daemon that monitors
 ## Prerequisites
 
 ### 1. Virtual Environment
-You do **not** need to manually activate a virtual environment if you use `uv run`. 
-Because this script imports logic directly from `openpi` (like `numpy` and `interpret_fast_tokens.py`), running it with `uv run python openpi_monitor.py` automatically uses the `openpi` project's virtual environment and handles all dependencies for you.
+You should run this script in a standard Python virtual environment. It is completely independent of the heavy machine learning environments (like `uv`) used by ALOHA, meaning you only need a few lightweight dependencies!
+
+**Create and activate the environment:**
+```bash
+python3 -m venv venv
+source venv/bin/activate
+```
+
+**Install dependencies:**
+```bash
+pip install numpy cryptography typing_extensions
+```
 
 ### 2. Does Docker need to be running?
 - **For Testing (Offline):** **No.** If you just want to test the script against an existing log file from a past simulation, Docker does not need to be running.
-- **For Live Monitoring (Online):** **Yes.** If you want the script to monitor the robot live, you must have the ALOHA simulation running via `docker compose`.
+- **For Live Monitoring (Online):** **Yes.** If you want the script to monitor the robot live, you must have the ALOHA simulation running in a separate terminal using:
+  ```bash
+  docker compose -f examples/aloha_sim/compose.yml up --build
+  ```
 
 ## Usage
 
-The script defaults to "Live Demo" mode, but you can override it using `--log-file` for offline testing.
-
-*(Note: If you have permission errors with your cache, prepend `UV_CACHE_DIR=~/my_uv_cache` before `uv run`)*
+The script defaults to "Live Demo" mode, but you can override it using `--log-file` for offline testing. Make sure your virtual environment is activated (`source venv/bin/activate`) before running these commands!
 
 ### Mode A: Live Demo (Default & Recommended)
 This mode completely automates the process. It will automatically find the log directory, delete any old log files, and then patiently wait for you to start the Docker simulation. As soon as a new file is created, it begins monitoring it.
 
 ```bash
-uv run python openpi_monitor.py --config-file <path_to_config>
-```
-if you have permission error for ~/.cache file use :
-
-```bash
-UV_CACHE_DIR=~/my_uv_cache uv run python openpi_monitor.py --config-file <path_to_config>
+python openpi_monitor.py --config-file <path_to_config>
 ```
 
 ### Mode B: Offline Testing
@@ -35,17 +41,8 @@ If you already have a `.jsonl` file and just want to process it instantly withou
 
 ```bash
 LATEST_LOG=$(ls -t data/aloha_sim/token_logs/*.jsonl | head -1)
-uv run python openpi_monitor.py --config-file <path_to_config> --log-file "$LATEST_LOG"
-```
-
-if you have permission error for ~/.cache file use :
-
-```bash
-LATEST_LOG=$(ls -t data/aloha_sim/token_logs/*.jsonl | head -1)
-```
-```bash
-UV_CACHE_DIR=~/my_uv_cache uv run python openpi_monitor.py --config-file <path_to_config> --log-file "$LATEST_LOG"
+python openpi_monitor.py --config-file <path_to_config> --log-file "$LATEST_LOG"
 ```
 
 ## IoTAuth Integration
-The script has the IoTAuth code block already built into it. Once you generate a valid `client.config` file from the Auth Server, simply open `openpi_monitor.py` and uncomment the `ctx = IoTAuthContext.from_config(...)` section to enable live network requests!
+The script has the IoTAuth code block already built into it. Once you generate a valid `client.config` file from the Auth Server, simply pass it into the `--config-file` argument to seamlessly authenticate with the Auth Server and fetch secure session keys!
