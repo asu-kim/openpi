@@ -4,6 +4,7 @@ import json
 import os
 import sys
 import time
+import traceback
 
 OPENPI_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "."))
 if OPENPI_DIR not in sys.path:
@@ -165,9 +166,10 @@ def main():
                 
                 print(f"  -> Requesting session key for purpose: {purpose_payload}")
                 keys = ctx.request_session_keys(purpose=purpose_payload)
-                print(f"  -> [SUCCESS] Authorized! Received Session Key: {keys[0].key_id}")
+                print(f"  -> [SUCCESS] Authorized! Received Session Key: {keys[0].id.hex()}")
                 
             except Exception as e:
+                traceback.print_exc()
                 print(f"  -> [IoTAuth Warning] Code skipped or failed: {e}")
 
 
