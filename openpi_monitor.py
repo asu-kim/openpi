@@ -111,6 +111,50 @@ def main():
             os.makedirs(default_dir, exist_ok=True)
         target_file = wait_for_new_file(default_dir)
 
+    # ---------------------------------------------------------
+    # IoTAuth Setup (Done once at startup)
+    # ---------------------------------------------------------
+    IOTAUTH_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../iotauth/entity/python"))
+    if IOTAUTH_DIR not in sys.path:
+        sys.path.append(IOTAUTH_DIR)
+        
+    try:
+        from iotauth import IoTAuthContext
+        import datetime
+        
+        abs_config_path = os.path.abspath(args.config_file)
+        expected_anchor = os.path.basename(os.path.dirname(os.path.dirname(os.path.dirname(abs_config_path))))
+        
+        original_cwd = os.getcwd()
+        if expected_anchor == 'example_entities':
+            os.chdir(os.path.dirname(os.path.dirname(os.path.dirname(abs_config_path))))
+        
+        try:
+            ctx = IoTAuthContext.from_config(abs_config_path)
+            print(f"Initialized IoTAuth Context successfully from {abs_config_path}")
+        finally:
+            os.chdir(original_cwd)
+            
+    except Exception as e:
+        print(f"Failed to initialize IoTAuth Context: {e}")
+        sys.exit(1)
+
+    purpose_payload = {
+        "group": "Servers",
+        "context": {
+            "Number of People": 1,
+            "Location": "Classroom",
+            "Time of Day": datetime.datetime.now().strftime("%H:%M")
+        }
+    }
+
+    # ---------------------------------------------------------
+    # Monitor State
+    # ---------------------------------------------------------
+    previous_label = "unknown"
+    current_session_key = None
+    key_grant_time_ms = None
+
     # Live processing loop
     for json_line in tail_log_file(target_file):
         result = process_record(json_line)
@@ -122,55 +166,69 @@ def main():
             proxy_score = metrics["motion_proxy"]
             label = metrics["motion_label"]
             
-            print(f"[Record {record_idx:^3}] Motion Proxy: {proxy_score:.3f} ({label.upper()})")
+            print(f"\n[Record {record_idx:^3}] Motion Proxy: {proxy_score:.3f} ({label.upper()})")
             
-            # ---------------------------------------------------------
-            # IoTAuth Integration Block
-            # ---------------------------------------------------------
-            # 1. Dynamically add the iotauth python package to our path
-            IOTAUTH_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../iotauth/entity/python"))
-            if IOTAUTH_DIR not in sys.path:
-                sys.path.append(IOTAUTH_DIR)
+            # Update time context payload
+            purpose_payload["context"]["Time of Day"] = datetime.datetime.now().strftime("%H:%M")
+            current_time_ms = int(time.time() * 1000)
+            
+            # 1. Check if we have a valid key
+            is_valid_key = False
+            if current_session_key is not None:
+                is_valid_key = True
                 
-            try:
-                from iotauth import IoTAuthContext
+                # Check Absolute Validity
+                if current_session_key.abs_validity is not None:
+                    if current_time_ms >= key_grant_time_ms + current_session_key.abs_validity:
+                        is_valid_key = False
+                        print("  -> [IoTAuth] Cached key expired (Absolute Validity reached).")
                 
-                # To support Node generated configs (which use relative paths based on CWD),
-                # we must temporarily change our CWD to 'example_entities' if applicable.
-                abs_config_path = os.path.abspath(args.config_file)
-                expected_anchor = os.path.basename(os.path.dirname(os.path.dirname(os.path.dirname(abs_config_path))))
+                # Check Relative Validity
+                if is_valid_key and current_session_key.rel_validity is not None and current_session_key.first_use_ms is not None:
+                    if current_time_ms >= current_session_key.first_use_ms + current_session_key.rel_validity:
+                        is_valid_key = False
+                        print("  -> [IoTAuth] Cached key expired (Relative Validity reached).")
+            
+            # 2. Decision Logic
+            if label == "active":
+                if not is_valid_key:
+                    # Scenarios 1 & 3: Request new key
+                    print(f"  -> [IoTAuth] Requesting new session key for purpose: {purpose_payload}")
+                    try:
+                        keys = ctx.request_session_keys(purpose=purpose_payload)
+                        current_session_key = keys[0]
+                        key_grant_time_ms = current_time_ms
+                        current_session_key.first_use_ms = current_time_ms
+                        
+                        print(f"  -> [SUCCESS] Authorized! Received Session Key: {current_session_key.id.hex()}")
+                        print(f"  -> [IoTAuth] Abs Validity: {current_session_key.abs_validity} ms | Rel Validity: {current_session_key.rel_validity} ms")
+                        print("  -> [Actuator] Forwarding authenticated command to hardware.")
+                    except Exception as e:
+                        traceback.print_exc()
+                        print(f"  -> [ERROR] Failed to get session key: {e}")
+                        print("  -> [Actuator] BLOCKED! Cannot forward command without valid session key.")
+                else:
+                    # Scenario 2: Reuse key
+                    if current_session_key.first_use_ms is None:
+                        current_session_key.first_use_ms = current_time_ms
+                        
+                    # Calculate remaining validity for the print statement
+                    abs_left = "N/A"
+                    if current_session_key.abs_validity is not None:
+                        abs_left = f"{((key_grant_time_ms + current_session_key.abs_validity) - current_time_ms):,} ms"
+                        
+                    rel_left = "N/A"
+                    if current_session_key.rel_validity is not None:
+                        rel_left = f"{((current_session_key.first_use_ms + current_session_key.rel_validity) - current_time_ms):,} ms"
+                        
+                    print(f"  -> [IoTAuth] Reusing valid cached Session Key: {current_session_key.id.hex()}")
+                    print(f"  -> [IoTAuth] Remaining -> Abs: {abs_left} | Rel: {rel_left}")
+                    print("  -> [Actuator] Forwarding authenticated command to hardware.")
+            else:
+                # Scenario 4: Do nothing
+                print("  -> [Monitor] Insignificant motion. Record dropped. No network activity.")
                 
-                original_cwd = os.getcwd()
-                if expected_anchor == 'example_entities':
-                    os.chdir(os.path.dirname(os.path.dirname(os.path.dirname(abs_config_path))))
-                
-                try:
-                    # Load context using the user-provided config file path
-                    ctx = IoTAuthContext.from_config(abs_config_path)
-                finally:
-                    os.chdir(original_cwd)
-                
-                # We use standard Auth context fields (NOT the robot's motion data)
-                # to prove to the Auth server we are allowed to communicate.
-                import datetime
-                current_time = datetime.datetime.now().strftime("%H:%M")
-                
-                purpose_payload = {
-                    "group": "Servers",
-                    "context": {
-                        "Number of People": 1,
-                        "Location": "Classroom",
-                        "Time of Day": current_time
-                    }
-                }
-                
-                print(f"  -> Requesting session key for purpose: {purpose_payload}")
-                keys = ctx.request_session_keys(purpose=purpose_payload)
-                print(f"  -> [SUCCESS] Authorized! Received Session Key: {keys[0].id.hex()}")
-                
-            except Exception as e:
-                traceback.print_exc()
-                print(f"  -> [IoTAuth Warning] Code skipped or failed: {e}")
+            previous_label = label
 
 
 if __name__ == "__main__":
