@@ -36,6 +36,7 @@ COPY ./packages/openpi-client/pyproject.toml /tmp/openpi-client/pyproject.toml
 # Install python dependencies.
 RUN uv venv --python 3.11.9 $UV_PROJECT_ENVIRONMENT
 RUN uv pip sync /tmp/requirements.txt /tmp/openpi-client/pyproject.toml
+RUN uv pip install cryptography
 ENV PYTHONPATH=/app:/app/src:/app/packages/openpi-client/src
 
 CMD ["/bin/bash", "-c", "source /.venv/bin/activate && python examples/aloha_sim/main.py"]
