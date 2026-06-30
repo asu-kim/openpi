@@ -16,6 +16,7 @@ services:
       - $PWD:/app
       - ../../data:/data
       - ../../../iotauth:/iotauth
+      - /etc/localtime:/etc/localtime:ro
     environment:
       # Episode length (overrides the gym 300-step default); ~records per episode =
       # value / action_horizon(10). Set in examples/aloha_sim/.env or export it.
