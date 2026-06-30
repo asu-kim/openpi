@@ -87,8 +87,12 @@ if __name__ == "__main__":
         # Extract the date part from pi0_fast_tokens_YYYY-MM-DD-HH-MM-SS
         if stem.startswith("pi0_fast_tokens_"):
             date_str = stem.replace("pi0_fast_tokens_", "")
-            output_file = f"latency_report_{date_str}.txt"
+            output_name = f"latency_report_{date_str}.txt"
         else:
-            output_file = f"{stem}_latency_report.txt"
+            output_name = f"{stem}_latency_report.txt"
+            
+        out_dir = Path("latency_reports")
+        out_dir.mkdir(exist_ok=True)
+        output_file = str(out_dir / output_name)
         
     analyze_latencies(args.input_file, output_file)
