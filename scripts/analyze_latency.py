@@ -70,13 +70,25 @@ def analyze_latencies(input_file: str, output_file: str):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Analyze step latencies from openpi JSONL logs.")
     parser.add_argument("input_file", help="Path to the input .jsonl log file")
-    parser.add_argument("--output", "-o", default="latency_report.txt", 
-                        help="Path to save the output report (default: latency_report.txt)")
+    parser.add_argument("--output", "-o", default=None, 
+                        help="Path to save the output report (default: latency_report_<date>.txt)")
     args = parser.parse_args()
     
     # Ensure input exists
-    if not Path(args.input_file).exists():
+    input_path = Path(args.input_file)
+    if not input_path.exists():
         print(f"Error: Could not find input file '{args.input_file}'")
         exit(1)
         
-    analyze_latencies(args.input_file, args.output)
+    # Generate default output name based on input filename
+    output_file = args.output
+    if output_file is None:
+        stem = input_path.stem
+        # Extract the date part from pi0_fast_tokens_YYYY-MM-DD-HH-MM-SS
+        if stem.startswith("pi0_fast_tokens_"):
+            date_str = stem.replace("pi0_fast_tokens_", "")
+            output_file = f"latency_report_{date_str}.txt"
+        else:
+            output_file = f"{stem}_latency_report.txt"
+        
+    analyze_latencies(args.input_file, output_file)
