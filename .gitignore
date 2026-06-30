@@ -169,3 +169,6 @@ cython_debug/
 
 # Interpreted tokens
 interpreted_tokens/
+
+## SST security certificates
+*.pem
