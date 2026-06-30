@@ -39,6 +39,10 @@ class Args:
     # numbered continuously across episodes. Can also be set via ALOHA_NUM_EPISODES.
     num_episodes: int = 1
 
+    # Optional path to IoTAuth configuration file. If provided, the simulation
+    # will run the ActionMonitor logic to authorize and filter inferences.
+    monitor_config: str | None = None
+
 
 def main(args: Args) -> None:
     # Env var overrides so these can be set through compose/.env without changing the
@@ -51,6 +55,26 @@ def main(args: Args) -> None:
     if env_val := os.environ.get("ALOHA_NUM_EPISODES"):
         num_episodes = int(env_val)
 
+    if env_val := os.environ.get("MONITOR_CONFIG"):
+        args.monitor_config = env_val
+
+    base_policy = _websocket_client_policy.WebsocketClientPolicy(
+        host=args.host,
+        port=args.port,
+    )
+    
+    if args.monitor_config:
+        import sys
+        sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+        from openpi_monitor import ActionMonitor
+        from openpi_client.monitor_policy import MonitorPolicyWrapper
+        
+        logging.info(f"Initializing ActionMonitor with config: {args.monitor_config}")
+        monitor = ActionMonitor(args.monitor_config)
+        policy_to_use = MonitorPolicyWrapper(base_policy, monitor)
+    else:
+        policy_to_use = base_policy
+
     runtime = _runtime.Runtime(
         environment=_env.AlohaSimEnvironment(
             task=args.task,
@@ -61,10 +85,7 @@ def main(args: Args) -> None:
         ),
         agent=_policy_agent.PolicyAgent(
             policy=action_chunk_broker.ActionChunkBroker(
-                policy=_websocket_client_policy.WebsocketClientPolicy(
-                    host=args.host,
-                    port=args.port,
-                ),
+                policy=policy_to_use,
                 action_horizon=args.action_horizon,
             )
         ),
