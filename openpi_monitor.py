@@ -62,9 +62,11 @@ def tail_log_file(file_path):
 
 
 class ActionMonitor:
-    def __init__(self, config_file: str, motion_threshold: float = None):
+    def __init__(self, config_file: str, motion_threshold: float = None, force_request: bool = None, always_request: bool = None):
         self.config_file = config_file
         self.motion_threshold = motion_threshold if motion_threshold is not None else float(os.environ.get("OPENPI_MOTION_THRESHOLD", 0.01))
+        self.force_request = force_request if force_request is not None else bool(os.environ.get("FORCE_IOTAUTH_REQUEST"))
+        self.always_request = always_request if always_request is not None else bool(os.environ.get("ALWAYS_IOTAUTH_REQUEST"))
         self.ctx = None
         
         IOTAUTH_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../iotauth/entity/python"))
@@ -124,7 +126,7 @@ class ActionMonitor:
         current_time_ms = int(time.time() * 1000)
         
         is_valid_key = False
-        if self.current_session_key is not None and not os.environ.get("FORCE_IOTAUTH_REQUEST"):
+        if self.current_session_key is not None and not self.force_request and not self.always_request:
             is_valid_key = True
             if self.current_session_key.abs_validity is not None:
                 if current_time_ms >= self.key_grant_time_ms + self.current_session_key.abs_validity:
@@ -138,7 +140,7 @@ class ActionMonitor:
         
         allowed = False
         
-        if label == "active":
+        if label == "active" or self.always_request:
             if not is_valid_key:
                 print(f"  -> [IoTAuth] Requesting new session key for purpose: {self.purpose_payload}")
                 try:
@@ -231,6 +233,8 @@ def main():
     parser.add_argument("--config-file", required=True, help="Path to the IoTAuth entity config file.")
     parser.add_argument("--log-file", help="Specific pi0_fast_tokens.jsonl file to read offline.")
     parser.add_argument("--motion-threshold", type=float, default=float(os.environ.get("OPENPI_MOTION_THRESHOLD", 0.01)), help="Motion threshold for joint variation (default: 0.01 or OPENPI_MOTION_THRESHOLD env var).")
+    parser.add_argument("--force-iotauth-request", action="store_true", default=bool(os.environ.get("FORCE_IOTAUTH_REQUEST")), help="Disable caching and send a session key request for every ACTIVE record.")
+    parser.add_argument("--always-iotauth-request", action="store_true", default=bool(os.environ.get("ALWAYS_IOTAUTH_REQUEST")), help="Send a session key request for EVERY record regardless of the motion threshold value.")
     args = parser.parse_args()
 
     target_file = args.log_file
@@ -240,7 +244,7 @@ def main():
             os.makedirs(default_dir, exist_ok=True)
         target_file = wait_for_new_file(default_dir)
 
-    monitor = ActionMonitor(args.config_file, motion_threshold=args.motion_threshold)
+    monitor = ActionMonitor(args.config_file, motion_threshold=args.motion_threshold, force_request=args.force_iotauth_request, always_request=args.always_iotauth_request)
 
     for json_line in tail_log_file(target_file):
         try:

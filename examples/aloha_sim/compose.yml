@@ -28,6 +28,8 @@ services:
       - MONITOR_CONFIG=${MONITOR_CONFIG:-}
       # Set to 1 to bypass the IoTAuth key cache and force a new key request on every motion.
       - FORCE_IOTAUTH_REQUEST=${FORCE_IOTAUTH_REQUEST:-}
+      # Set to 1 to request session keys on EVERY record regardless of motion threshold or label.
+      - ALWAYS_IOTAUTH_REQUEST=${ALWAYS_IOTAUTH_REQUEST:-}
       # Dynamically overrides the default joint motion sensitivity threshold (default: 0.01).
       - OPENPI_MOTION_THRESHOLD=${OPENPI_MOTION_THRESHOLD:-}
 
