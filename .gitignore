@@ -170,7 +170,8 @@ cython_debug/
 # Interpreted tokens
 interpreted_tokens/
 
-## SST security certificates
+## SST security certificates and configs
+*.config
 *.pem
 
 # For MacOS
