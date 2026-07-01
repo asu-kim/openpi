@@ -176,3 +176,6 @@ interpreted_tokens/
 # For MacOS
 .DS_Store
 
+# latency reports
+latency_reports/
+
