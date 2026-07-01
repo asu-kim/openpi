@@ -62,8 +62,9 @@ def tail_log_file(file_path):
 
 
 class ActionMonitor:
-    def __init__(self, config_file: str):
+    def __init__(self, config_file: str, motion_threshold: float = None):
         self.config_file = config_file
+        self.motion_threshold = motion_threshold if motion_threshold is not None else float(os.environ.get("OPENPI_MOTION_THRESHOLD", 0.01))
         self.ctx = None
         
         IOTAUTH_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../iotauth/entity/python"))
@@ -114,7 +115,7 @@ class ActionMonitor:
         # ALOHA uses first 14 dims. We evaluate motion on these dims if available.
         aloha_actions = actions[:, :14] if actions.shape[-1] >= 14 else actions
         
-        jm = joint_motion_analysis(aloha_actions)
+        jm = joint_motion_analysis(aloha_actions, move_threshold=self.motion_threshold)
         label = "still" if jm["chunk_is_static"] else "active"
         
         print(f"\n[Record {record_idx:^3}] Motion Label: {label.upper()} (Moving Joints: {jm['num_moving_joints']})")
@@ -229,6 +230,7 @@ def main():
     parser = argparse.ArgumentParser(description="Live monitor for OpenPI continuous actions.")
     parser.add_argument("--config-file", required=True, help="Path to the IoTAuth entity config file.")
     parser.add_argument("--log-file", help="Specific pi0_fast_tokens.jsonl file to read offline.")
+    parser.add_argument("--motion-threshold", type=float, default=float(os.environ.get("OPENPI_MOTION_THRESHOLD", 0.01)), help="Motion threshold for joint variation (default: 0.01 or OPENPI_MOTION_THRESHOLD env var).")
     args = parser.parse_args()
 
     target_file = args.log_file
@@ -238,7 +240,7 @@ def main():
             os.makedirs(default_dir, exist_ok=True)
         target_file = wait_for_new_file(default_dir)
 
-    monitor = ActionMonitor(args.config_file)
+    monitor = ActionMonitor(args.config_file, motion_threshold=args.motion_threshold)
 
     for json_line in tail_log_file(target_file):
         try:
