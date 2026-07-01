@@ -172,3 +172,7 @@ interpreted_tokens/
 
 ## SST security certificates
 *.pem
+
+# For MacOS
+.DS_Store
+
