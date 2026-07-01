@@ -1,23 +1,36 @@
 #!/usr/bin/env python3
 import json
 import argparse
+import re
 from pathlib import Path
 
 def analyze_latencies(input_file: str, output_file: str):
     records = []
     
-    # Read the JSONL file
+    # Read the JSONL file using fast regex to avoid parsing massive token arrays
     with open(input_file, 'r') as f:
         for line in f:
             line = line.strip()
             if not line:
                 continue
-            try:
-                data = json.loads(line)
-                if 'time_unix' in data and 'record_index' in data:
-                    records.append(data)
-            except json.JSONDecodeError:
-                pass
+            idx_match = re.search(r'"record_index":\s*(\d+)', line)
+            time_match = re.search(r'"time_unix":\s*([\d\.]+)', line)
+            if idx_match and time_match:
+                record = {
+                    "record_index": int(idx_match.group(1)),
+                    "time_unix": float(time_match.group(1))
+                }
+                mon_match = re.search(r'"monitor_latency":\s*([\d\.]+)', line)
+                if mon_match:
+                    record["monitor_latency"] = float(mon_match.group(1))
+                records.append(record)
+            else:
+                try:
+                    data = json.loads(line)
+                    if 'time_unix' in data and 'record_index' in data:
+                        records.append(data)
+                except json.JSONDecodeError:
+                    pass
                 
     # Sort records by their index to guarantee sequential order
     records.sort(key=lambda x: x['record_index'])

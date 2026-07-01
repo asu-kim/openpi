@@ -2,6 +2,7 @@ import argparse
 import glob
 import json
 import os
+import re
 import sys
 import time
 import traceback
@@ -208,15 +209,15 @@ class ActionMonitor:
             
             updated = False
             for i in range(len(lines) - 1, -1, -1):
-                try:
-                    record = json.loads(lines[i])
-                    if record.get("record_index") == record_idx:
-                        record["monitor_latency"] = round(latency_ms, 2)
-                        lines[i] = json.dumps(record) + "\n"
-                        updated = True
-                        break
-                except json.JSONDecodeError:
-                    continue
+                line = lines[i]
+                if re.search(rf'"record_index":\s*{record_idx}\b', line):
+                    if '"monitor_latency"' in line:
+                        lines[i] = re.sub(r'"monitor_latency":\s*[\d\.]+\s*,', f'"monitor_latency": {round(latency_ms, 2)},', line, count=1)
+                    else:
+                        pattern = r'("time_iso":\s*"[^"]+"\s*,)'
+                        lines[i] = re.sub(pattern, rf'\1 "monitor_latency": {round(latency_ms, 2)},', line, count=1)
+                    updated = True
+                    break
             
             if updated:
                 with open(latest_file, "w") as f:
