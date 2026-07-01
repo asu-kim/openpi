@@ -26,6 +26,8 @@ services:
       - ALOHA_NUM_EPISODES=${ALOHA_NUM_EPISODES:-}
       # Monitor config to automatically load ActionMonitor in simulation client.
       - MONITOR_CONFIG=${MONITOR_CONFIG:-}
+      # Set to 1 to bypass the IoTAuth key cache and force a new key request on every motion.
+      - FORCE_IOTAUTH_REQUEST=${FORCE_IOTAUTH_REQUEST:-}
 
   openpi_server:
     image: openpi_server

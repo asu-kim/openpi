@@ -6,6 +6,8 @@ import sys
 import time
 import traceback
 import numpy as np
+import datetime
+
 
 OPENPI_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "."))
 if OPENPI_DIR not in sys.path:
@@ -106,7 +108,7 @@ class ActionMonitor:
         Evaluates continuous float actions and enforces IoTAuth session keys.
         Returns the original actions if allowed, or a static (zero-motion) chunk if blocked.
         """
-        import datetime
+        start_time = time.perf_counter()
         
         # ALOHA uses first 14 dims. We evaluate motion on these dims if available.
         aloha_actions = actions[:, :14] if actions.shape[-1] >= 14 else actions
@@ -120,7 +122,7 @@ class ActionMonitor:
         current_time_ms = int(time.time() * 1000)
         
         is_valid_key = False
-        if self.current_session_key is not None:
+        if self.current_session_key is not None and not os.environ.get("FORCE_IOTAUTH_REQUEST"):
             is_valid_key = True
             if self.current_session_key.abs_validity is not None:
                 if current_time_ms >= self.key_grant_time_ms + self.current_session_key.abs_validity:
@@ -178,8 +180,12 @@ class ActionMonitor:
             # Replicate the first timestep's position across all timesteps to freeze the robot.
             frozen_actions = np.copy(actions)
             frozen_actions[:] = frozen_actions[0]
+            end_time = time.perf_counter()
+            print(f"  -> [Monitor] Execution time: {(end_time - start_time) * 1000:.2f} ms")
             return frozen_actions
             
+        end_time = time.perf_counter()
+        print(f"  -> [Monitor] Execution time: {(end_time - start_time) * 1000:.2f} ms")
         return actions
 
 def main():
