@@ -33,6 +33,9 @@ def analyze_latencies(input_file: str, output_file: str):
         out.write(f"Source: {input_file}\n")
         out.write("=" * 50 + "\n\n")
         
+        if "monitor_latency" in records[0]:
+            out.write(f"Record {records[0]['record_index']:>4} (Initial Step)        | Monitor Latency: {records[0]['monitor_latency']:>6.2f} ms\n")
+            
         for i in range(1, len(records)):
             prev = records[i-1]
             curr = records[i]
@@ -40,7 +43,11 @@ def analyze_latencies(input_file: str, output_file: str):
             latency = curr['time_unix'] - prev['time_unix']
             latencies.append(latency)
             
-            out.write(f"Record {prev['record_index']:>4} -> Record {curr['record_index']:>4}: {latency:.4f} seconds\n")
+            mon_str = ""
+            if "monitor_latency" in curr:
+                mon_str = f" | Monitor Latency: {curr['monitor_latency']:>6.2f} ms"
+            
+            out.write(f"Record {prev['record_index']:>4} -> Record {curr['record_index']:>4}: {latency:.4f} seconds{mon_str}\n")
             
         avg_latency = sum(latencies) / len(latencies)
         max_latency = max(latencies)
@@ -52,19 +59,42 @@ def analyze_latencies(input_file: str, output_file: str):
         worst_curr = records[max_idx+1]['record_index']
         
         out.write("\n" + "=" * 50 + "\n")
-        out.write("SUMMARY STATISTICS\n")
+        out.write("SUMMARY STATISTICS (Step Inference Latency)\n")
         out.write("=" * 50 + "\n")
         out.write(f"Total Records Analyzed: {len(records)}\n")
-        out.write(f"Average Latency:        {avg_latency:.4f} seconds\n")
-        out.write(f"Best-Case Latency:      {min_latency:.4f} seconds\n")
-        out.write(f"Worst-Case Latency:     {max_latency:.4f} seconds\n")
+        out.write(f"Average Step Latency:   {avg_latency:.4f} seconds\n")
+        out.write(f"Best-Case Step Latency: {min_latency:.4f} seconds\n")
+        out.write(f"Worst-Case Step Latency:{max_latency:.4f} seconds\n")
         out.write(f"  └─ Occurred between Record {worst_prev} and Record {worst_curr}\n")
+        
+        monitor_lats = [(r["record_index"], r["monitor_latency"]) for r in records if "monitor_latency" in r]
+        if monitor_lats:
+            vals = [val for _, val in monitor_lats]
+            avg_mon = sum(vals) / len(vals)
+            min_mon = min(vals)
+            max_mon = max(vals)
+            worst_mon_idx = [idx for idx, val in monitor_lats if val == max_mon][0]
+            
+            out.write("\n" + "=" * 50 + "\n")
+            out.write("SUMMARY STATISTICS (Monitor Execution Latency)\n")
+            out.write("=" * 50 + "\n")
+            out.write(f"Total Monitor Records:  {len(monitor_lats)}\n")
+            out.write(f"Average Monitor Latency:{avg_mon:.2f} ms\n")
+            out.write(f"Best-Case Monitor Lat.: {min_mon:.2f} ms\n")
+            out.write(f"Worst-Case Monitor Lat.:{max_mon:.2f} ms\n")
+            out.write(f"  └─ Occurred at Record {worst_mon_idx}\n")
 
     print(f"✅ Analysis complete! Detailed report saved to: {output_file}")
     print("-" * 40)
     print(f"Total Records Analyzed: {len(records)}")
-    print(f"Average Latency:        {avg_latency:.4f}s")
-    print(f"Worst-Case Latency:     {max_latency:.4f}s")
+    print(f"Average Step Latency:   {avg_latency:.4f}s")
+    print(f"Worst-Case Step Latency:{max_latency:.4f}s")
+    
+    if monitor_lats:
+        vals = [val for _, val in monitor_lats]
+        print("-" * 40)
+        print(f"Average Monitor Latency: {sum(vals)/len(vals):.2f} ms")
+        print(f"Worst-Case Monitor Lat.: {max(vals):.2f} ms")
 
 
 if __name__ == "__main__":

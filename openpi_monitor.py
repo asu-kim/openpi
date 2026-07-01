@@ -175,18 +175,54 @@ class ActionMonitor:
 
         self.previous_label = label
         
+        end_time = time.perf_counter()
+        exec_time_ms = (end_time - start_time) * 1000
+        print(f"  -> [Monitor] Execution time: {exec_time_ms:.2f} ms")
+        self.append_latency_to_log(record_idx, exec_time_ms)
+        
         if not allowed:
             # Block motion safely for absolute joint angles:
             # Replicate the first timestep's position across all timesteps to freeze the robot.
             frozen_actions = np.copy(actions)
             frozen_actions[:] = frozen_actions[0]
-            end_time = time.perf_counter()
-            print(f"  -> [Monitor] Execution time: {(end_time - start_time) * 1000:.2f} ms")
             return frozen_actions
             
-        end_time = time.perf_counter()
-        print(f"  -> [Monitor] Execution time: {(end_time - start_time) * 1000:.2f} ms")
         return actions
+
+    def append_latency_to_log(self, record_idx: int, latency_ms: float):
+        if record_idx < 0:
+            return
+        log_dir = "data/aloha_sim/token_logs"
+        if env_log := os.environ.get("OPENPI_FAST_TOKEN_LOG"):
+            log_dir = os.path.dirname(env_log)
+        if not os.path.exists(log_dir):
+            return
+        existing_files = glob.glob(os.path.join(log_dir, "*.jsonl"))
+        if not existing_files:
+            return
+        latest_file = max(existing_files, key=os.path.getctime)
+        
+        try:
+            with open(latest_file, "r") as f:
+                lines = f.readlines()
+            
+            updated = False
+            for i in range(len(lines) - 1, -1, -1):
+                try:
+                    record = json.loads(lines[i])
+                    if record.get("record_index") == record_idx:
+                        record["monitor_latency"] = round(latency_ms, 2)
+                        lines[i] = json.dumps(record) + "\n"
+                        updated = True
+                        break
+                except json.JSONDecodeError:
+                    continue
+            
+            if updated:
+                with open(latest_file, "w") as f:
+                    f.writelines(lines)
+        except Exception as e:
+            print(f"  -> [Monitor] Warning: Could not update jsonl log: {e}")
 
 def main():
     parser = argparse.ArgumentParser(description="Live monitor for OpenPI continuous actions.")
