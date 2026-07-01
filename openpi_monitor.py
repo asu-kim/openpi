@@ -64,9 +64,10 @@ def tail_log_file(file_path):
 class ActionMonitor:
     def __init__(self, config_file: str, motion_threshold: float = None, force_request: bool = None, always_request: bool = None):
         self.config_file = config_file
-        self.motion_threshold = motion_threshold if motion_threshold is not None else float(os.environ.get("OPENPI_MOTION_THRESHOLD", 0.01))
-        self.force_request = force_request if force_request is not None else bool(os.environ.get("FORCE_IOTAUTH_REQUEST"))
-        self.always_request = always_request if always_request is not None else bool(os.environ.get("ALWAYS_IOTAUTH_REQUEST"))
+        env_thresh = os.environ.get("OPENPI_MOTION_THRESHOLD", "").strip()
+        self.motion_threshold = motion_threshold if motion_threshold is not None else float(env_thresh) if env_thresh else 0.01
+        self.force_request = force_request if force_request is not None else (os.environ.get("FORCE_IOTAUTH_REQUEST", "").strip().lower() in ("1", "true", "yes", "on"))
+        self.always_request = always_request if always_request is not None else (os.environ.get("ALWAYS_IOTAUTH_REQUEST", "").strip().lower() in ("1", "true", "yes", "on"))
         self.ctx = None
         
         IOTAUTH_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../iotauth/entity/python"))
@@ -232,9 +233,11 @@ def main():
     parser = argparse.ArgumentParser(description="Live monitor for OpenPI continuous actions.")
     parser.add_argument("--config-file", required=True, help="Path to the IoTAuth entity config file.")
     parser.add_argument("--log-file", help="Specific pi0_fast_tokens.jsonl file to read offline.")
-    parser.add_argument("--motion-threshold", type=float, default=float(os.environ.get("OPENPI_MOTION_THRESHOLD", 0.01)), help="Motion threshold for joint variation (default: 0.01 or OPENPI_MOTION_THRESHOLD env var).")
-    parser.add_argument("--force-iotauth-request", action="store_true", default=bool(os.environ.get("FORCE_IOTAUTH_REQUEST")), help="Disable caching and send a session key request for every ACTIVE record.")
-    parser.add_argument("--always-iotauth-request", action="store_true", default=bool(os.environ.get("ALWAYS_IOTAUTH_REQUEST")), help="Send a session key request for EVERY record regardless of the motion threshold value.")
+    env_thresh = os.environ.get("OPENPI_MOTION_THRESHOLD", "").strip()
+    default_thresh = float(env_thresh) if env_thresh else 0.01
+    parser.add_argument("--motion-threshold", type=float, default=default_thresh, help="Motion threshold for joint variation (default: 0.01 or OPENPI_MOTION_THRESHOLD env var).")
+    parser.add_argument("--force-iotauth-request", action="store_true", default=(os.environ.get("FORCE_IOTAUTH_REQUEST", "").strip().lower() in ("1", "true", "yes", "on")), help="Disable caching and send a session key request for every ACTIVE record.")
+    parser.add_argument("--always-iotauth-request", action="store_true", default=(os.environ.get("ALWAYS_IOTAUTH_REQUEST", "").strip().lower() in ("1", "true", "yes", "on")), help="Send a session key request for EVERY record regardless of the motion threshold value.")
     args = parser.parse_args()
 
     target_file = args.log_file
