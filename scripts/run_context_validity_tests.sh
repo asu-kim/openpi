@@ -29,71 +29,73 @@ echo "Password    : $AUTH_PASSWORD"
 echo "Iterations  : $RUNS runs per validity period (${VALIDITY_PERIODS[*]}s)"
 echo "====================================================================="
 
-# Step 1: Clean and generate IoTAuth credentials & DB
-echo ""
-echo "▶️  [Step 1/6] Cleaning existing IoTAuth databases and credentials..."
-cd "$IOTAUTH_DIR/examples"
-./cleanAll.sh
-
-echo ""
-echo "▶️  [Step 2/6] Generating credentials for context_based_validity.graph..."
-./generateAll.sh -g configs/context_based_validity.graph -p "$AUTH_PASSWORD" -lc
-
-# Step 2: Copy certificates and keys to OpenPI
-echo ""
-echo "▶️  [Step 3/6] Copying certificates and client keys directly to validity folders..."
-for val in "${VALIDITY_PERIODS[@]}"; do
-    dest_dir="$OPENPI_DIR/sst_config_creds/local_auth/testing/validity/val${val}"
-    mkdir -p "$dest_dir"
-    cp "$IOTAUTH_DIR/entity/auth_certs/Auth101EntityCert.pem" "$dest_dir/"
-    cp "$IOTAUTH_DIR/entity/credentials/keys/net1/Net1.Client_val_${val}Key.pem" "$dest_dir/"
-done
-
-echo "✅ Certificates and keys successfully copied."
-
-# Step 3: Start Java Auth101 Server
-echo ""
-echo "▶️  [Step 4/6] Starting Auth101 Java server in background..."
-# Kill any existing process on port 21900
-if lsof -tiTCP:21900 -sTCP:LISTEN >/dev/null 2>&1; then
-    echo "⚠️ Port 21900 is in use. Killing existing process..."
-    kill -9 $(lsof -tiTCP:21900 -sTCP:LISTEN) 2>/dev/null || true
-    sleep 1
-fi
-
-AUTH_LOG="$OPENPI_DIR/latency_reports/auth101.log"
-mkdir -p "$OPENPI_DIR/latency_reports"
-
-cd "$IOTAUTH_DIR/auth/auth-server"
-nohup java -jar target/auth-server-jar-with-dependencies.jar -p ../properties/exampleAuth101.properties --password="$AUTH_PASSWORD" > "$AUTH_LOG" 2>&1 &
-AUTH_PID=$!
-echo "Auth101 PID: $AUTH_PID. Waiting for port 21900 to open..."
-
-# Ensure we kill Auth101 on script exit or interrupt
-cleanup() {
+# Step 1-4: Local Auth setup (Skipped if REMOTE_AUTH=1)
+if [ "${REMOTE_AUTH:-0}" != "1" ]; then
     echo ""
-    echo "⏹️  Shutting down Auth101 server (PID: $AUTH_PID)..."
-    kill -9 "$AUTH_PID" 2>/dev/null || true
-    if lsof -tiTCP:21900 -sTCP:LISTEN >/dev/null 2>&1; then
-        kill -9 $(lsof -tiTCP:21900 -sTCP:LISTEN) 2>/dev/null || true
-    fi
-    echo "✅ Cleaned up services."
-}
-trap cleanup EXIT INT TERM
+    echo "▶️  [Step 1/6] Cleaning existing IoTAuth databases and credentials..."
+    cd "$IOTAUTH_DIR/examples"
+    ./cleanAll.sh
 
-# Poll port 21900 for readiness
-elapsed=0
-timeout=30
-while ! lsof -tiTCP:21900 -sTCP:LISTEN >/dev/null 2>&1; do
-    if [ $elapsed -ge $timeout ]; then
-        echo "❌ Error: Timed out waiting for Auth101 server to bind to port 21900."
-        cat "$AUTH_LOG"
-        exit 1
+    echo ""
+    echo "▶️  [Step 2/6] Generating credentials for context_based_validity.graph..."
+    ./generateAll.sh -g configs/context_based_validity.graph -p "$AUTH_PASSWORD" -lc
+
+    echo ""
+    echo "▶️  [Step 3/6] Copying certificates and client keys directly to validity folders..."
+    for val in "${VALIDITY_PERIODS[@]}"; do
+        dest_dir="$OPENPI_DIR/sst_config_creds/local_auth/testing/validity/val${val}"
+        mkdir -p "$dest_dir"
+        cp "$IOTAUTH_DIR/entity/auth_certs/Auth101EntityCert.pem" "$dest_dir/"
+        cp "$IOTAUTH_DIR/entity/credentials/keys/net1/Net1.Client_val_${val}Key.pem" "$dest_dir/"
+    done
+
+    echo "✅ Certificates and keys successfully copied."
+
+    echo ""
+    echo "▶️  [Step 4/6] Starting Auth101 Java server in background..."
+    if lsof -tiTCP:21900 -sTCP:LISTEN >/dev/null 2>&1; then
+        echo "⚠️ Port 21900 is in use. Killing existing process..."
+        kill -9 $(lsof -tiTCP:21900 -sTCP:LISTEN) 2>/dev/null || true
+        sleep 1
     fi
-    sleep 1
-    elapsed=$((elapsed + 1))
-done
-echo "✅ Auth101 server is ready and listening on port 21900."
+
+    AUTH_LOG="$OPENPI_DIR/latency_reports/auth101.log"
+    mkdir -p "$OPENPI_DIR/latency_reports"
+
+    cd "$IOTAUTH_DIR/auth/auth-server"
+    nohup java -jar target/auth-server-jar-with-dependencies.jar -p ../properties/exampleAuth101.properties --password="$AUTH_PASSWORD" > "$AUTH_LOG" 2>&1 &
+    AUTH_PID=$!
+    echo "Auth101 PID: $AUTH_PID. Waiting for port 21900 to open..."
+
+    cleanup() {
+        echo ""
+        echo "⏹️  Shutting down Auth101 server (PID: $AUTH_PID)..."
+        kill -9 "$AUTH_PID" 2>/dev/null || true
+        if lsof -tiTCP:21900 -sTCP:LISTEN >/dev/null 2>&1; then
+            kill -9 $(lsof -tiTCP:21900 -sTCP:LISTEN) 2>/dev/null || true
+        fi
+        echo "✅ Cleaned up services."
+    }
+    trap cleanup EXIT INT TERM
+
+    elapsed=0
+    timeout=30
+    while ! lsof -tiTCP:21900 -sTCP:LISTEN >/dev/null 2>&1; do
+        if [ $elapsed -ge $timeout ]; then
+            echo "❌ Error: Timed out waiting for Auth101 server to bind to port 21900."
+            cat "$AUTH_LOG"
+            exit 1
+        fi
+        sleep 1
+        elapsed=$((elapsed + 1))
+    done
+    echo "✅ Auth101 server is ready and listening on port 21900."
+else
+    echo ""
+    echo "🌐 [REMOTE AUTH MODE] Skipping local certificate regeneration and local Auth101 server startup."
+    echo "✅ Assuming Auth101 is running remotely and config files/certificates are already in place."
+    mkdir -p "$OPENPI_DIR/latency_reports"
+fi
 
 # Step 4: Run simulation iterations across validity periods
 echo ""
