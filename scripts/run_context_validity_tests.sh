@@ -42,8 +42,8 @@ mkdir -p "$OPENPI_DIR/sst_config_creds/local_auth/testing/auth_certs"
 mkdir -p "$OPENPI_DIR/sst_config_creds/local_auth/testing/credentials/keys/net1"
 
 # Copy Auth101 cert
-cp "$IOTAUTH_DIR/auth/credentials/certs/Auth101EntityCert.pem" "$OPENPI_DIR/sst_config_creds/auth_certs/"
-cp "$IOTAUTH_DIR/auth/credentials/certs/Auth101EntityCert.pem" "$OPENPI_DIR/sst_config_creds/local_auth/testing/auth_certs/"
+cp "$IOTAUTH_DIR/entity/auth_certs/Auth101EntityCert.pem" "$OPENPI_DIR/sst_config_creds/auth_certs/"
+cp "$IOTAUTH_DIR/entity/auth_certs/Auth101EntityCert.pem" "$OPENPI_DIR/sst_config_creds/local_auth/testing/auth_certs/"
 
 # Copy all generated net1 keys
 cp -r "$IOTAUTH_DIR/entity/credentials/keys/net1/"* "$OPENPI_DIR/sst_config_creds/credentials/keys/net1/"
