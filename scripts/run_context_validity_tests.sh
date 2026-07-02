@@ -116,8 +116,11 @@ for VAL in "${VALIDITY_PERIODS[@]}"; do
         # Prepare environment variables for Docker compose
         export MONITOR_CONFIG="/app/sst_config_creds/local_auth/testing/validity/val${VAL}/client_val_${VAL}.config"
         export OPENPI_MOTION_THRESHOLD="0"
-        export ALOHA_MAX_EPISODE_STEPS="${ALOHA_MAX_EPISODE_STEPS:-50}"
+        export ALOHA_MAX_EPISODE_STEPS="${ALOHA_MAX_EPISODE_STEPS:-300}"
         export ALOHA_NUM_EPISODES="${ALOHA_NUM_EPISODES:-1}"
+        export TEST_VALIDITY_PERIOD="${VAL}"
+        export TEST_RUN_ITERATION="${RUN}"
+        export TEST_TOTAL_RUNS="${RUNS}"
         
         # Run Docker simulation with --build flag and auto-exit when client finishes
         docker compose -f examples/aloha_sim/compose.yml up --build --abort-on-container-exit

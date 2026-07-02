@@ -121,7 +121,19 @@ class ActionMonitor:
         jm = joint_motion_analysis(aloha_actions, move_threshold=self.motion_threshold)
         label = "still" if jm["chunk_is_static"] else "active"
         
-        print(f"\n[Record {record_idx:^3}] Motion Label: {label.upper()} (Moving Joints: {jm['num_moving_joints']})")
+        val_period = os.environ.get("TEST_VALIDITY_PERIOD", "unknown")
+        run_iter = os.environ.get("TEST_RUN_ITERATION", "unknown")
+        total_runs = os.environ.get("TEST_TOTAL_RUNS", "unknown")
+        if val_period == "unknown" and self.config_file:
+            import re
+            m = re.search(r'val[_]?(\d+)', self.config_file, re.IGNORECASE)
+            if m:
+                val_period = m.group(1)
+        
+        print("\n" + "="*75)
+        print(f" [METADATA] Validity Test: {val_period}s | Iteration/Run: {run_iter}/{total_runs} | Record Index: {record_idx}")
+        print(f" [MOTION]   Label: {label.upper()} (Moving Joints: {jm['num_moving_joints']} / {aloha_actions.shape[-1]}) | Threshold: {self.motion_threshold}")
+        print("-" * 75)
         
         self.purpose_payload["context"]["Time of Day"] = datetime.datetime.now().strftime("%H:%M")
         current_time_ms = int(time.time() * 1000)
@@ -130,14 +142,16 @@ class ActionMonitor:
         if self.current_session_key is not None and not self.force_request and not self.always_request:
             is_valid_key = True
             if self.current_session_key.abs_validity is not None:
+                elapsed_abs = current_time_ms - self.key_grant_time_ms
                 if current_time_ms >= self.key_grant_time_ms + self.current_session_key.abs_validity:
                     is_valid_key = False
-                    print("  -> [IoTAuth] Cached key expired (Absolute Validity reached).")
+                    print(f"  -> [IoTAuth] Cached key EXPIRED (Absolute Validity reached: {elapsed_abs:,} ms >= {self.current_session_key.abs_validity:,} ms).")
             
             if is_valid_key and self.current_session_key.rel_validity is not None and self.current_session_key.first_use_ms is not None:
+                elapsed_rel = current_time_ms - self.current_session_key.first_use_ms
                 if current_time_ms >= self.current_session_key.first_use_ms + self.current_session_key.rel_validity:
                     is_valid_key = False
-                    print("  -> [IoTAuth] Cached key expired (Relative Validity reached).")
+                    print(f"  -> [IoTAuth] Cached key EXPIRED (Relative Validity reached: {elapsed_rel:,} ms >= {self.current_session_key.rel_validity:,} ms since first use at {self.current_session_key.first_use_ms}).")
         
         allowed = False
         
@@ -151,7 +165,7 @@ class ActionMonitor:
                     self.current_session_key.first_use_ms = current_time_ms
                     
                     print(f"  -> [SUCCESS] Authorized! Received Session Key: {self.current_session_key.id.hex()}")
-                    print(f"  -> [IoTAuth] Abs Validity: {self.current_session_key.abs_validity} ms | Rel Validity: {self.current_session_key.rel_validity} ms")
+                    print(f"  -> [IoTAuth] Key Metadata -> Grant/FirstUse Time: {current_time_ms} ms | Abs Validity: {self.current_session_key.abs_validity} ms | Rel Validity: {self.current_session_key.rel_validity} ms")
                     print("  -> [Actuator] Forwarding authenticated command to hardware.")
                     allowed = True
                 except Exception as e:
@@ -167,11 +181,13 @@ class ActionMonitor:
                 if self.current_session_key.abs_validity is not None:
                     abs_left = f"{((self.key_grant_time_ms + self.current_session_key.abs_validity) - current_time_ms):,} ms"
                 rel_left = "N/A"
+                elapsed_rel = "N/A"
                 if self.current_session_key.rel_validity is not None:
                     rel_left = f"{((self.current_session_key.first_use_ms + self.current_session_key.rel_validity) - current_time_ms):,} ms"
+                    elapsed_rel = f"{(current_time_ms - self.current_session_key.first_use_ms):,} ms"
                     
                 print(f"  -> [IoTAuth] Reusing valid cached Session Key: {self.current_session_key.id.hex()}")
-                print(f"  -> [IoTAuth] Remaining -> Abs: {abs_left} | Rel: {rel_left}")
+                print(f"  -> [IoTAuth] Status -> Elapsed Rel: {elapsed_rel} | Remaining Rel: {rel_left} | Remaining Abs: {abs_left}")
                 print("  -> [Actuator] Forwarding authenticated command to hardware.")
                 allowed = True
         else:
@@ -183,6 +199,7 @@ class ActionMonitor:
         end_time = time.perf_counter()
         exec_time_ms = (end_time - start_time) * 1000
         print(f"  -> [Monitor] Execution time: {exec_time_ms:.2f} ms")
+        print("="*75)
         self.append_latency_to_log(record_idx, exec_time_ms)
         
         if not allowed:
