@@ -10,6 +10,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OPENPI_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 IOTAUTH_DIR="$(cd "$OPENPI_DIR/../iotauth" && pwd)"
 
+# Automatically activate virtual environment if present
+if [ -f "$OPENPI_DIR/.venv/bin/activate" ]; then
+    echo "🐍 Activating Python virtual environment at $OPENPI_DIR/.venv..."
+    source "$OPENPI_DIR/.venv/bin/activate"
+fi
+
 AUTH_PASSWORD="${1:-1234}"
 RUNS="${2:-5}"
 VALIDITY_PERIODS=(1 3 5 7)
@@ -35,19 +41,13 @@ echo "▶️  [Step 2/6] Generating credentials for context_based_validity.graph
 
 # Step 2: Copy certificates and keys to OpenPI
 echo ""
-echo "▶️  [Step 3/6] Copying generated certificates and client keys to OpenPI..."
-mkdir -p "$OPENPI_DIR/sst_config_creds/auth_certs"
-mkdir -p "$OPENPI_DIR/sst_config_creds/credentials/keys/net1"
-mkdir -p "$OPENPI_DIR/sst_config_creds/local_auth/testing/auth_certs"
-mkdir -p "$OPENPI_DIR/sst_config_creds/local_auth/testing/credentials/keys/net1"
-
-# Copy Auth101 cert
-cp "$IOTAUTH_DIR/entity/auth_certs/Auth101EntityCert.pem" "$OPENPI_DIR/sst_config_creds/auth_certs/"
-cp "$IOTAUTH_DIR/entity/auth_certs/Auth101EntityCert.pem" "$OPENPI_DIR/sst_config_creds/local_auth/testing/auth_certs/"
-
-# Copy all generated net1 keys
-cp -r "$IOTAUTH_DIR/entity/credentials/keys/net1/"* "$OPENPI_DIR/sst_config_creds/credentials/keys/net1/"
-cp -r "$IOTAUTH_DIR/entity/credentials/keys/net1/"* "$OPENPI_DIR/sst_config_creds/local_auth/testing/credentials/keys/net1/"
+echo "▶️  [Step 3/6] Copying certificates and client keys directly to validity folders..."
+for val in "${VALIDITY_PERIODS[@]}"; do
+    dest_dir="$OPENPI_DIR/sst_config_creds/local_auth/testing/validity/val${val}"
+    mkdir -p "$dest_dir"
+    cp "$IOTAUTH_DIR/entity/auth_certs/Auth101EntityCert.pem" "$dest_dir/"
+    cp "$IOTAUTH_DIR/entity/credentials/keys/net1/Net1.Client_val_${val}Key.pem" "$dest_dir/"
+done
 
 echo "✅ Certificates and keys successfully copied."
 
