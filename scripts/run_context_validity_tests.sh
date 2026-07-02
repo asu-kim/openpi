@@ -123,7 +123,13 @@ for VAL in "${VALIDITY_PERIODS[@]}"; do
         fi
         
         # Prepare environment variables for Docker compose
-        export MONITOR_CONFIG="/app/sst_config_creds/${AUTH_DIR}/testing/validity/val${VAL}/client_val_${VAL}.config"
+        CONFIG_PATH="/app/sst_config_creds/${AUTH_DIR}/testing/validity/val${VAL}/client_val_${VAL}.config"
+        if [ ! -f "$OPENPI_DIR/sst_config_creds/${AUTH_DIR}/testing/validity/val${VAL}/client_val_${VAL}.config" ]; then
+            if [ -f "$OPENPI_DIR/sst_config_creds/${AUTH_DIR}/validity/val${VAL}/client_val_${VAL}.config" ]; then
+                CONFIG_PATH="/app/sst_config_creds/${AUTH_DIR}/validity/val${VAL}/client_val_${VAL}.config"
+            fi
+        fi
+        export MONITOR_CONFIG="$CONFIG_PATH"
         export OPENPI_MOTION_THRESHOLD="0"
         export ALOHA_MAX_EPISODE_STEPS="${ALOHA_MAX_EPISODE_STEPS:-300}"
         export ALOHA_NUM_EPISODES="${ALOHA_NUM_EPISODES:-1}"

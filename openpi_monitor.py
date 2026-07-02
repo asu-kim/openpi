@@ -79,17 +79,21 @@ class ActionMonitor:
             import datetime
             
             abs_config_path = os.path.abspath(self.config_file)
-            expected_anchor = os.path.basename(os.path.dirname(os.path.dirname(os.path.dirname(abs_config_path))))
-            
-            original_cwd = os.getcwd()
-            if expected_anchor in ('example_entities', 'testing'):
-                os.chdir(os.path.dirname(os.path.dirname(os.path.dirname(abs_config_path))))
-            
             try:
                 self.ctx = IoTAuthContext.from_config(abs_config_path)
                 print(f"Initialized IoTAuth Context successfully from {abs_config_path}")
-            finally:
-                os.chdir(original_cwd)
+            except Exception as first_err:
+                target_dir = os.path.dirname(os.path.dirname(os.path.dirname(abs_config_path)))
+                if os.path.exists(target_dir) and os.path.isdir(target_dir):
+                    original_cwd = os.getcwd()
+                    os.chdir(target_dir)
+                    try:
+                        self.ctx = IoTAuthContext.from_config(abs_config_path)
+                        print(f"Initialized IoTAuth Context successfully from {abs_config_path} (after chdir to {target_dir})")
+                    finally:
+                        os.chdir(original_cwd)
+                else:
+                    raise first_err
                 
         except Exception as e:
             print(f"Failed to initialize IoTAuth Context: {e}")
