@@ -82,7 +82,7 @@ class ActionMonitor:
             expected_anchor = os.path.basename(os.path.dirname(os.path.dirname(os.path.dirname(abs_config_path))))
             
             original_cwd = os.getcwd()
-            if expected_anchor == 'example_entities':
+            if expected_anchor in ('example_entities', 'testing'):
                 os.chdir(os.path.dirname(os.path.dirname(os.path.dirname(abs_config_path))))
             
             try:
