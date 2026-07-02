@@ -119,8 +119,9 @@ for VAL in "${VALIDITY_PERIODS[@]}"; do
         export ALOHA_MAX_EPISODE_STEPS="${ALOHA_MAX_EPISODE_STEPS:-50}"
         export ALOHA_NUM_EPISODES="${ALOHA_NUM_EPISODES:-1}"
         
-        # Run Docker simulation with --build flag
-        docker compose -f examples/aloha_sim/compose.yml up --build
+        # Run Docker simulation with --build flag and auto-exit when client finishes
+        docker compose -f examples/aloha_sim/compose.yml up --build --abort-on-container-exit
+        docker compose -f examples/aloha_sim/compose.yml down >/dev/null 2>&1 || true
         
         # Find latest generated jsonl log file
         LOG_DIR="$OPENPI_DIR/data/aloha_sim/token_logs"
