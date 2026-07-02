@@ -115,8 +115,15 @@ for VAL in "${VALIDITY_PERIODS[@]}"; do
         echo ""
         echo "🔄 [Validity ${VAL}s | Run ${RUN}/${RUNS}] Launching simulation..."
         
+        # Determine config directory name: remote_auth when REMOTE_AUTH=1, otherwise local_auth
+        if [ "${REMOTE_AUTH:-0}" = "1" ]; then
+            AUTH_DIR="remote_auth"
+        else
+            AUTH_DIR="local_auth"
+        fi
+        
         # Prepare environment variables for Docker compose
-        export MONITOR_CONFIG="/app/sst_config_creds/local_auth/testing/validity/val${VAL}/client_val_${VAL}.config"
+        export MONITOR_CONFIG="/app/sst_config_creds/${AUTH_DIR}/testing/validity/val${VAL}/client_val_${VAL}.config"
         export OPENPI_MOTION_THRESHOLD="0"
         export ALOHA_MAX_EPISODE_STEPS="${ALOHA_MAX_EPISODE_STEPS:-300}"
         export ALOHA_NUM_EPISODES="${ALOHA_NUM_EPISODES:-1}"
