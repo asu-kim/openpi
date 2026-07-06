@@ -135,16 +135,17 @@ def run_single_iteration(validity_sec: float, run_idx: int, args: argparse.Names
     return monitor_lat
 
 
-def generate_plots_and_reports(validities: list, results: dict, output_dir: Path):
+def generate_plots_and_reports(validities: list, results: dict, worst_case_results: dict, output_dir: Path):
     output_dir.mkdir(exist_ok=True)
-    
+
     # Prepare summary statistics
     summary_rows = []
     avg_latencies = []
     std_latencies = []
     min_latencies = []
     max_latencies = []
-    
+    avg_worst_latencies = []  # mean of per-run worst-case values
+
     for val in validities:
         runs = results[val]
         avg = sum(runs) / len(runs) if runs else 0.0
@@ -152,44 +153,51 @@ def generate_plots_and_reports(validities: list, results: dict, output_dir: Path
         max_val = max(runs) if runs else 0.0
         variance = sum((x - avg) ** 2 for x in runs) / len(runs) if len(runs) > 1 else 0.0
         std_val = variance ** 0.5
-        
+
+        wc_runs = worst_case_results.get(val, [])
+        avg_wc = sum(wc_runs) / len(wc_runs) if wc_runs else 0.0
+
         avg_latencies.append(avg)
         std_latencies.append(std_val)
         min_latencies.append(min_val)
         max_latencies.append(max_val)
-        
+        avg_worst_latencies.append(avg_wc)
+
         summary_rows.append({
             "validity_sec": val,
             "runs": runs,
             "avg": avg,
             "std": std_val,
             "min": min_val,
-            "max": max_val
+            "max": max_val,
+            "avg_wc": avg_wc,
         })
-        
+
     # Print Console Report Table
     print("\n" + "="*80)
     print("VALIDITY vs. MONITOR LATENCY TEST RESULTS (Auth on Same Device)")
     print("="*80)
-    header = f"{'Validity (s)':>12} | " + " | ".join([f"Run {i+1} (ms)".rjust(10) for i in range(len(list(results.values())[0]))]) + f" | {'Average (ms)':>12} | {'Std Dev':>10}"
+    num_runs = len(list(results.values())[0])
+    header = (f"{'Validity (s)':>12} | "
+              + " | ".join([f"Run {i+1} (ms)".rjust(10) for i in range(num_runs)])
+              + f" | {'Average (ms)':>12} | {'Std Dev':>10} | {'AvgWorstCase':>12}")
     print(header)
     print("-" * len(header))
     for row in summary_rows:
         runs_str = " | ".join([f"{r:>10.2f}" for r in row["runs"]])
-        print(f"{row['validity_sec']:>12.1f} | {runs_str} | {row['avg']:>12.2f} | {row['std']:>10.2f}")
+        print(f"{row['validity_sec']:>12.1f} | {runs_str} | {row['avg']:>12.2f} | {row['std']:>10.2f} | {row['avg_wc']:>12.2f}")
     print("="*80)
-    
+
     # Write CSV
     csv_path = output_dir / "validity_vs_latency_same_device.csv"
     with open(csv_path, "w") as f:
-        num_runs = len(list(results.values())[0])
         run_headers = ",".join([f"Run_{i+1}_ms" for i in range(num_runs)])
-        f.write(f"Validity_sec,{run_headers},Average_ms,StdDev_ms,Min_ms,Max_ms\n")
+        f.write(f"Validity_sec,{run_headers},Average_ms,StdDev_ms,Min_ms,Max_ms,AvgWorstCase_ms\n")
         for row in summary_rows:
             runs_csv = ",".join([f"{r:.4f}" for r in row["runs"]])
-            f.write(f"{row['validity_sec']},{runs_csv},{row['avg']:.4f},{row['std']:.4f},{row['min']:.4f},{row['max']:.4f}\n")
+            f.write(f"{row['validity_sec']},{runs_csv},{row['avg']:.4f},{row['std']:.4f},{row['min']:.4f},{row['max']:.4f},{row['avg_wc']:.4f}\n")
     print(f"📊 CSV summary report saved to: {csv_path}")
-    
+
     # Write Text Report
     txt_path = output_dir / "validity_vs_latency_report.txt"
     with open(txt_path, "w") as f:
@@ -200,7 +208,7 @@ def generate_plots_and_reports(validities: list, results: dict, output_dir: Path
         f.write("-" * len(header) + "\n")
         for row in summary_rows:
             runs_str = " | ".join([f"{r:>10.2f}" for r in row["runs"]])
-            f.write(f"{row['validity_sec']:>12.1f} | {runs_str} | {row['avg']:>12.2f} | {row['std']:>10.2f}\n")
+            f.write(f"{row['validity_sec']:>12.1f} | {runs_str} | {row['avg']:>12.2f} | {row['std']:>10.2f} | {row['avg_wc']:>12.2f}\n")
     print(f"📄 Text summary report saved to: {txt_path}")
 
     # Plot Graph using matplotlib
@@ -211,40 +219,71 @@ def generate_plots_and_reports(validities: list, results: dict, output_dir: Path
         return
 
     try:
-        plt.figure(figsize=(10, 6), dpi=300)
-        
-        # Plot mean line with error bars representing std dev
-        plt.errorbar(validities, avg_latencies, yerr=std_latencies, marker='o', markersize=8, 
-                     linewidth=2.5, capsize=6, capthick=2, color='#1f77b4', 
-                     label='Average Monitor Latency (±1 Std Dev)', ecolor='#ff7f0e')
-        
-        # Also scatter plot all individual iteration runs for visual density
+        fig, ax1 = plt.subplots(figsize=(11, 6), dpi=300)
+
+        # ── Left Y-axis: Average Monitor Latency ──────────────────────────────
+        color_avg = '#1f77b4'   # blue
+        color_ind = '#2ca02c'   # green
+        color_wc  = '#d62728'   # red
+
+        ax1.errorbar(validities, avg_latencies, yerr=std_latencies,
+                     marker='o', markersize=8, linewidth=2.5,
+                     capsize=6, capthick=2, color=color_avg,
+                     label='Avg Monitor Latency (±1 Std Dev)', ecolor='#ff7f0e')
+
         for i, val in enumerate(validities):
-            plt.scatter([val]*len(results[val]), results[val], color='#2ca02c', alpha=0.6, s=30, 
+            ax1.scatter([val] * len(results[val]), results[val],
+                        color=color_ind, alpha=0.6, s=30,
                         label='Individual Runs' if i == 0 else "")
-            
-            # Annotate average values next to markers
-            plt.annotate(f"{avg_latencies[i]:.2f} ms", 
+            ax1.annotate(f"{avg_latencies[i]:.2f} ms",
                          (val, avg_latencies[i]),
-                         textcoords="offset points", xytext=(0, 12), ha='center',
-                         fontweight='bold', color='#1f77b4')
-            
-        plt.title('Monitor Latency vs. Session Key Relative Validity (Same Device Auth)', fontsize=14, fontweight='bold', pad=15)
-        plt.xlabel('Relative Validity Period (seconds)', fontsize=12, labelpad=10)
-        plt.ylabel('Monitor Latency (ms)', fontsize=12, labelpad=10)
-        plt.xticks(validities, [f"{v}s" for v in validities], fontsize=11)
-        plt.yticks(fontsize=11)
-        plt.grid(True, linestyle='--', alpha=0.5)
-        plt.legend(frameon=True, facecolor='white', framealpha=0.9, fontsize=11)
-        plt.tight_layout()
-        
+                         textcoords="offset points", xytext=(0, 12),
+                         ha='center', fontweight='bold', color=color_avg)
+
+        ax1.set_xlabel('Relative Validity Period (seconds)', fontsize=12, labelpad=10)
+        ax1.set_ylabel('Avg Monitor Latency (ms)', fontsize=12, color=color_avg, labelpad=10)
+        ax1.tick_params(axis='y', labelcolor=color_avg)
+        ax1.set_xticks(validities)
+        ax1.set_xticklabels([f"{v}s" for v in validities], fontsize=11)
+        ax1.grid(True, linestyle='--', alpha=0.4)
+
+        # ── Right Y-axis: Avg of Worst-Case Monitor Latency ───────────────────
+        ax2 = ax1.twinx()
+        ax2.plot(validities, avg_worst_latencies,
+                 marker='s', markersize=8, linewidth=2.5,
+                 linestyle='--', color=color_wc,
+                 label='Avg Worst-Case Monitor Latency')
+
+        for i, val in enumerate(validities):
+            ax2.annotate(f"{avg_worst_latencies[i]:.2f} ms",
+                         (val, avg_worst_latencies[i]),
+                         textcoords="offset points", xytext=(0, -18),
+                         ha='center', fontweight='bold', color=color_wc)
+
+        ax2.set_ylabel('Avg Worst-Case Monitor Latency (ms)', fontsize=12,
+                       color=color_wc, labelpad=10)
+        ax2.tick_params(axis='y', labelcolor=color_wc)
+
+        # ── Combined legend ───────────────────────────────────────────────────
+        lines1, labels1 = ax1.get_legend_handles_labels()
+        lines2, labels2 = ax2.get_legend_handles_labels()
+        ax1.legend(lines1 + lines2, labels1 + labels2,
+                   frameon=True, facecolor='white', framealpha=0.9, fontsize=10,
+                   loc='upper left')
+
+        fig.suptitle(
+            'Monitor Latency vs. Session Key Relative Validity (Same Device Auth)',
+            fontsize=14, fontweight='bold', y=1.01
+        )
+        fig.tight_layout()
+
         png_path = output_dir / "validity_vs_monitor_latency_same_device.png"
         pdf_path = output_dir / "validity_vs_monitor_latency_same_device.pdf"
-        
-        plt.savefig(png_path)
-        plt.savefig(pdf_path)
-        plt.close()
-        
+
+        fig.savefig(png_path, bbox_inches='tight')
+        fig.savefig(pdf_path, bbox_inches='tight')
+        plt.close(fig)
+
         print(f"📈 Graph (PNG) successfully created at: {png_path}")
         print(f"📈 Graph (PDF) successfully created at: {pdf_path}")
     except Exception as e:
@@ -284,6 +323,7 @@ def main():
         print("="*80)
         
         results = {val: [] for val in args.validities}
+        worst_case_results = {val: [] for val in args.validities}
         for val in args.validities:
             for r in range(1, args.runs + 1):
                 # Try integer representation first (e.g. val_1s_run_1.txt), then float (val_1.0s_run_1.txt)
@@ -292,25 +332,34 @@ def main():
                     reports_dir / f"val_{val}s_run_{r}.txt"
                 ]
                 lat = 0.0
+                wc_lat = 0.0
                 found_file = None
                 for cand in file_candidates:
                     if cand.exists():
                         found_file = cand
                         break
-                        
+
                 if found_file:
                     content = found_file.read_text()
-                    match = re.search(r"Average Monitor Latency:\s*([\d\.]+)\s*ms", content, re.IGNORECASE)
-                    if match:
-                        lat = float(match.group(1))
-                        print(f"✅ Loaded {found_file.name} -> {lat:.2f} ms")
+                    avg_match = re.search(r"Average Monitor Latency:\s*([\d\.]+)\s*ms", content, re.IGNORECASE)
+                    wc_match  = re.search(r"Worst-Case Monitor Lat\.:\s*([\d\.]+)\s*ms", content, re.IGNORECASE)
+                    if avg_match:
+                        lat = float(avg_match.group(1))
+                        print(f"✅ Loaded {found_file.name} -> avg: {lat:.2f} ms", end="")
                     else:
                         print(f"⚠️ Warning: Could not find 'Average Monitor Latency' in {found_file.name}")
+                    if wc_match:
+                        wc_lat = float(wc_match.group(1))
+                        print(f", worst-case: {wc_lat:.2f} ms")
+                    else:
+                        wc_lat = lat  # fall back to avg if worst-case line is missing
+                        print(f" (worst-case not found, using avg)")
                 else:
                     print(f"⚠️ Warning: Report file not found for validity {val}s run {r} in {reports_dir}")
                 results[val].append(lat)
-                
-        generate_plots_and_reports(args.validities, results, openpi_dir / args.output_dir)
+                worst_case_results[val].append(wc_lat)
+
+        generate_plots_and_reports(args.validities, results, worst_case_results, openpi_dir / args.output_dir)
         print("\n✅ Aggregation and plotting completed successfully!\n")
         return
 
@@ -341,7 +390,9 @@ def main():
                 results[val].append(0.0)
             time.sleep(0.5)  # Brief pause between iterations
             
-    generate_plots_and_reports(args.validities, results, openpi_dir / args.output_dir)
+    # In live-run mode, worst-case data is not separately tracked per run;
+    # pass an empty dict so generate_plots_and_reports() shows zeros on right axis.
+    generate_plots_and_reports(args.validities, results, {}, openpi_dir / args.output_dir)
     print("\n✅ All automated testing completed successfully!\n")
 
 
