@@ -22,7 +22,18 @@ import time
 import re
 import argparse
 import subprocess
+import tempfile
 from pathlib import Path
+
+# Ensure MPLCONFIGDIR is set to a writable temporary directory to avoid permission errors on restricted/shared workstations
+if "MPLCONFIGDIR" not in os.environ:
+    uid = getattr(os, "getuid", lambda: "default")()
+    cache_dir = Path(tempfile.gettempdir()) / f"matplotlib_cache_{uid}"
+    try:
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        os.environ["MPLCONFIGDIR"] = str(cache_dir)
+    except Exception:
+        pass
 
 # Try importing matplotlib; if unavailable, attempt re-launch with a known venv.
 try:
