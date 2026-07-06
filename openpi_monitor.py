@@ -111,6 +111,9 @@ class ActionMonitor:
         self.previous_label = "unknown"
         self.current_session_key = None
         self.key_grant_time_ms = None
+        self.motion_history = []
+        import atexit
+        atexit.register(self.print_summary)
 
     def process_actions(self, actions: np.ndarray, record_idx: int = -1) -> np.ndarray:
         """
@@ -125,6 +128,10 @@ class ActionMonitor:
         jm = joint_motion_analysis(aloha_actions, move_threshold=self.motion_threshold)
         label = "still" if jm["chunk_is_static"] else "active"
         
+        max_ptp = max([j["peak_to_peak"] for j in jm.get("joints", [])], default=0.0)
+        mean_ptp = float(np.mean([j["peak_to_peak"] for j in jm.get("joints", [])])) if jm.get("joints") else 0.0
+        self.motion_history.append({"record_idx": record_idx, "score": max_ptp, "mean": mean_ptp, "label": label})
+        
         val_period = os.environ.get("TEST_VALIDITY_PERIOD", "unknown")
         run_iter = os.environ.get("TEST_RUN_ITERATION", "unknown")
         total_runs = os.environ.get("TEST_TOTAL_RUNS", "unknown")
@@ -136,7 +143,7 @@ class ActionMonitor:
         
         print("\n" + "="*75)
         print(f" [METADATA] Validity Test: {val_period}s | Iteration/Run: {run_iter}/{total_runs} | Record Index: {record_idx}")
-        print(f" [MOTION]   Label: {label.upper()} (Moving Joints: {jm['num_moving_joints']} / {aloha_actions.shape[-1]}) | Threshold: {self.motion_threshold}")
+        print(f" [MOTION]   Label: {label.upper()} | Score (Max PTP): {max_ptp:.4f} (Mean: {mean_ptp:.4f}) | Moving Joints: {jm['num_moving_joints']}/{aloha_actions.shape[-1]} | Threshold: {self.motion_threshold}")
         print("-" * 75)
         
         self.purpose_payload["context"]["Time of Day"] = datetime.datetime.now().strftime("%H:%M")
@@ -251,6 +258,45 @@ class ActionMonitor:
                     f.writelines(lines)
         except Exception as e:
             print(f"  -> [Monitor] Warning: Could not update jsonl log: {e}")
+
+    def print_summary(self):
+        if not hasattr(self, "motion_history") or not self.motion_history:
+            return
+        total = len(self.motion_history)
+        active_cnt = sum(1 for r in self.motion_history if r["label"] == "active")
+        still_cnt = sum(1 for r in self.motion_history if r["label"] == "still")
+        scores = [r["score"] for r in self.motion_history]
+        
+        min_s = float(np.min(scores))
+        max_s = float(np.max(scores))
+        mean_s = float(np.mean(scores))
+        median_s = float(np.median(scores))
+        std_s = float(np.std(scores))
+        p25 = float(np.percentile(scores, 25))
+        p75 = float(np.percentile(scores, 75))
+
+        print("\n" + "=" * 80)
+        print(f"FINAL MOTION MONITOR SUMMARY (Across {total} Records)")
+        print("=" * 80)
+        print(f"Configured Threshold : {self.motion_threshold:.4f}")
+        print(f"Total Records        : {total}")
+        print(f"Active Records       : {active_cnt} ({active_cnt/total*100:.2f}%)")
+        print(f"Still (Bypassed)     : {still_cnt} ({still_cnt/total*100:.2f}%)")
+        print("-" * 80)
+        print("Motion Score (Max Peak-to-Peak Joint Variation) Distribution:")
+        print(f"  Minimum Score      : {min_s:.4f}")
+        print(f"  25th Percentile    : {p25:.4f}")
+        print(f"  Median (50th %ile) : {median_s:.4f}")
+        print(f"  75th Percentile    : {p75:.4f}")
+        print(f"  Maximum Score      : {max_s:.4f}")
+        print(f"  Average Score      : {mean_s:.4f} ± {std_s:.4f}")
+        print("-" * 80)
+        print("💡 Recommended Threshold Values for Calibration:")
+        print(f"  • To get ~75% Active (25% Still) -> Set threshold around {p25:.4f}")
+        print(f"  • To get ~50% Active (50% Still) -> Set threshold around {median_s:.4f}")
+        print(f"  • To get ~25% Active (75% Still) -> Set threshold around {p75:.4f}")
+        print(f"  • To get   0% Active (100% Still)-> Set threshold > {max_s:.4f}")
+        print("=" * 80 + "\n")
 
 def main():
     parser = argparse.ArgumentParser(description="Live monitor for OpenPI continuous actions.")
