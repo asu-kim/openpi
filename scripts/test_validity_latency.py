@@ -135,7 +135,8 @@ def run_single_iteration(validity_sec: float, run_idx: int, args: argparse.Names
     return monitor_lat
 
 
-def generate_plots_and_reports(validities: list, results: dict, worst_case_results: dict, output_dir: Path):
+def generate_plots_and_reports(validities: list, results: dict, worst_case_results: dict, output_dir: Path,
+                               test_name: str = "test1", auth_mode: str = "local"):
     output_dir.mkdir(exist_ok=True)
 
     # Prepare summary statistics
@@ -271,14 +272,17 @@ def generate_plots_and_reports(validities: list, results: dict, worst_case_resul
                    frameon=True, facecolor='white', framealpha=0.9, fontsize=10,
                    loc='upper left')
 
-        fig.suptitle(
-            'Monitor Latency vs. Session Key Relative Validity (Same Device Auth)',
-            fontsize=14, fontweight='bold', y=1.01
-        )
+        # Build title and filename from test/auth context
+        test_label = test_name.upper()  # e.g. "TEST1"
+        mode_label = auth_mode.capitalize() + " Auth"  # e.g. "Local Auth" / "Remote Auth"
+        plot_title = f"{test_label}: Monitor Latency vs. Session Key Relative Validity — {mode_label}"
+        file_stem = f"{test_name}_{auth_mode}_validity_vs_monitor_latency"  # e.g. test1_local_validity_vs_monitor_latency
+
+        fig.suptitle(plot_title, fontsize=14, fontweight='bold', y=1.01)
         fig.tight_layout()
 
-        png_path = output_dir / "validity_vs_monitor_latency_same_device.png"
-        pdf_path = output_dir / "validity_vs_monitor_latency_same_device.pdf"
+        png_path = output_dir / f"{file_stem}.png"
+        pdf_path = output_dir / f"{file_stem}.pdf"
 
         fig.savefig(png_path, bbox_inches='tight')
         fig.savefig(pdf_path, bbox_inches='tight')
@@ -308,6 +312,10 @@ def main():
                         help="Directory to store CSV reports, text logs, and graphs.")
     parser.add_argument("--aggregate-reports-dir", default=None,
                         help="Directory containing pre-generated report files (val_<sec>s_run_<idx>.txt) to aggregate directly without running simulation.")
+    parser.add_argument("--test-name", default="test1",
+                        help="Test identifier used in plot title and output filenames (e.g. test1).")
+    parser.add_argument("--auth-mode", default="local", choices=["local", "remote"],
+                        help="Auth mode used in this run, reflected in plot title and filenames (local or remote).")
     args = parser.parse_args()
     
     openpi_dir = Path(__file__).parent.parent.resolve()
@@ -359,7 +367,8 @@ def main():
                 results[val].append(lat)
                 worst_case_results[val].append(wc_lat)
 
-        generate_plots_and_reports(args.validities, results, worst_case_results, openpi_dir / args.output_dir)
+        generate_plots_and_reports(args.validities, results, worst_case_results, openpi_dir / args.output_dir,
+                                    test_name=args.test_name, auth_mode=args.auth_mode)
         print("\n✅ Aggregation and plotting completed successfully!\n")
         return
 
@@ -392,7 +401,8 @@ def main():
             
     # In live-run mode, worst-case data is not separately tracked per run;
     # pass an empty dict so generate_plots_and_reports() shows zeros on right axis.
-    generate_plots_and_reports(args.validities, results, {}, openpi_dir / args.output_dir)
+    generate_plots_and_reports(args.validities, results, {}, openpi_dir / args.output_dir,
+                                test_name=args.test_name, auth_mode=args.auth_mode)
     print("\n✅ All automated testing completed successfully!\n")
 
 

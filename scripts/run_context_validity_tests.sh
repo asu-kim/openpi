@@ -276,7 +276,9 @@ python3 scripts/test_validity_latency.py \
     --aggregate-reports-dir "$OUTPUT_DIR" \
     --output-dir "$OUTPUT_DIR" \
     --runs "$RUNS" \
-    --validities "${VALIDITY_PERIODS[@]}"
+    --validities "${VALIDITY_PERIODS[@]}" \
+    --test-name "$TEST_NAME" \
+    --auth-mode "$AUTH_MODE"
 
 echo ""
 echo "====================================================================="
