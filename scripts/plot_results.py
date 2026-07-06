@@ -277,6 +277,8 @@ def generate_plots_and_reports(validities: list, results: dict, worst_case_resul
         ax2.set_ylabel('Avg Worst-Case Monitor Latency (ms)', fontsize=12,
                        color=color_wc, labelpad=10)
         ax2.tick_params(axis='y', labelcolor=color_wc)
+        ax2.set_ylim(0, 230)
+        ax2.set_yticks(range(0, 231, 10))
 
         # Combined legend
         lines1, labels1 = ax1.get_legend_handles_labels()
