@@ -16,29 +16,117 @@ if [ -f "$OPENPI_DIR/.venv/bin/activate" ]; then
     source "$OPENPI_DIR/.venv/bin/activate"
 fi
 
-AUTH_PASSWORD="${1:-1234}"
-RUNS="${2:-5}"
+# ─────────────────────────────────────────────────────────────────────────────
+# Argument parsing
+# Usage:
+#   ./scripts/run_context_validity_tests.sh --test1 --local [--password <pw>] [--runs <n>]
+#   ./scripts/run_context_validity_tests.sh --test1 --remote [--password <pw>] [--runs <n>]
+# ─────────────────────────────────────────────────────────────────────────────
+TEST_NAME=""
+AUTH_MODE=""
+AUTH_PASSWORD="1234"
+RUNS="5"
+
+if [ "$#" -eq 0 ]; then
+    echo "❌ Error: No arguments provided."
+    echo "Usage: $0 --test1 --local|--remote [--password <pw>] [--runs <n>]"
+    exit 1
+fi
+
+while [[ "$#" -gt 0 ]]; do
+    case "$1" in
+        --test1)
+            TEST_NAME="test1"
+            shift
+            ;;
+        --test2)
+            echo "❌ Error: --test2 is not implemented yet."
+            exit 1
+            ;;
+        --test3)
+            echo "❌ Error: --test3 is not implemented yet."
+            exit 1
+            ;;
+        --local)
+            AUTH_MODE="local"
+            shift
+            ;;
+        --remote)
+            AUTH_MODE="remote"
+            shift
+            ;;
+        --password)
+            if [[ -n "${2:-}" ]]; then
+                AUTH_PASSWORD="$2"
+                shift 2
+            else
+                echo "❌ Error: --password requires a value."
+                exit 1
+            fi
+            ;;
+        --runs)
+            if [[ -n "${2:-}" ]]; then
+                RUNS="$2"
+                shift 2
+            else
+                echo "❌ Error: --runs requires a value."
+                exit 1
+            fi
+            ;;
+        *)
+            echo "❌ Error: Unknown argument '$1'"
+            echo "Usage: $0 --test1 --local|--remote [--password <pw>] [--runs <n>]"
+            exit 1
+            ;;
+    esac
+done
+
+# Validate required flags
+if [ -z "$TEST_NAME" ]; then
+    echo "❌ Error: A test flag is required (e.g. --test1)."
+    echo "Usage: $0 --test1 --local|--remote [--password <pw>] [--runs <n>]"
+    exit 1
+fi
+
+if [ -z "$AUTH_MODE" ]; then
+    echo "❌ Error: An auth mode flag is required (--local or --remote)."
+    echo "Usage: $0 --test1 --local|--remote [--password <pw>] [--runs <n>]"
+    exit 1
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Output directory setup
+# Structure: test_reports/<test_name>/<auth_mode>/<timestamp>/
+# ─────────────────────────────────────────────────────────────────────────────
+RUN_TIMESTAMP="$(date +%Y-%m-%d-%H-%M-%S)"
 VALIDITY_PERIODS=(1 3 5 7)
+
+# Timestamped run output directory (reports + graphs + copied source data all land here)
+OUTPUT_DIR="$OPENPI_DIR/test_reports/$TEST_NAME/$AUTH_MODE/$RUN_TIMESTAMP"
+
+# Create the full test_reports hierarchy (including future test placeholders)
+mkdir -p "$OUTPUT_DIR"
+mkdir -p "$OPENPI_DIR/test_reports/test2/local"
+mkdir -p "$OPENPI_DIR/test_reports/test2/remote"
+mkdir -p "$OPENPI_DIR/test_reports/test3/local"
+mkdir -p "$OPENPI_DIR/test_reports/test3/remote"
 
 echo "====================================================================="
 echo "  Automated Context-Based Validity vs. Monitor Latency Testing"
 echo "====================================================================="
 echo "OpenPI Root : $OPENPI_DIR"
 echo "IoTAuth Root: $IOTAUTH_DIR"
+echo "Test        : $TEST_NAME"
+echo "Auth Mode   : $AUTH_MODE"
 echo "Password    : $AUTH_PASSWORD"
 echo "Iterations  : $RUNS runs per validity period (${VALIDITY_PERIODS[*]}s)"
+echo "Output Dir  : $OUTPUT_DIR"
 echo "====================================================================="
 
-if [ "${REMOTE_AUTH:-0}" = "1" ]; then
-    REPORTS_DIR="remote_latency_reports"
-    RESULTS_DIR="remote_latency_test_results"
-else
-    REPORTS_DIR="latency_reports"
-    RESULTS_DIR="latency_test_results"
-fi
-
-# Step 1-4: Local Auth setup (Skipped if REMOTE_AUTH=1)
-if [ "${REMOTE_AUTH:-0}" != "1" ]; then
+# ─────────────────────────────────────────────────────────────────────────────
+# Step 1-4: Local Auth setup (Skipped if --remote)
+# ─────────────────────────────────────────────────────────────────────────────
+if [ "$AUTH_MODE" = "local" ]; then
     echo ""
     echo "▶️  [Step 1/6] Cleaning existing IoTAuth databases and credentials..."
     cd "$IOTAUTH_DIR/examples"
@@ -67,8 +155,7 @@ if [ "${REMOTE_AUTH:-0}" != "1" ]; then
         sleep 1
     fi
 
-    AUTH_LOG="$OPENPI_DIR/$REPORTS_DIR/auth101.log"
-    mkdir -p "$OPENPI_DIR/$REPORTS_DIR"
+    AUTH_LOG="$OUTPUT_DIR/auth101.log"
 
     cd "$IOTAUTH_DIR/auth/auth-server"
     nohup java -jar target/auth-server-jar-with-dependencies.jar -p ../properties/exampleAuth101.properties --password="$AUTH_PASSWORD" > "$AUTH_LOG" 2>&1 &
@@ -98,38 +185,37 @@ if [ "${REMOTE_AUTH:-0}" != "1" ]; then
         elapsed=$((elapsed + 1))
     done
     echo "✅ Auth101 server is ready and listening on port 21900."
+
 else
     echo ""
     echo "🌐 [REMOTE AUTH MODE] Skipping local certificate regeneration and local Auth101 server startup."
     echo "✅ Assuming Auth101 is running remotely and config files/certificates are already in place."
-    mkdir -p "$OPENPI_DIR/$REPORTS_DIR"
 fi
 
-# Step 4: Run simulation iterations across validity periods
+# ─────────────────────────────────────────────────────────────────────────────
+# Step 5: Run simulation iterations across validity periods
+# ─────────────────────────────────────────────────────────────────────────────
 echo ""
 echo "▶️  [Step 5/6] Executing Docker simulation loops across validity periods..."
 cd "$OPENPI_DIR"
-
-# Clean any previous temporary report files
-rm -f "$OPENPI_DIR/$REPORTS_DIR"/val_*s_run_*.txt
 
 for VAL in "${VALIDITY_PERIODS[@]}"; do
     echo ""
     echo "---------------------------------------------------------------------"
     echo "  Testing Validity Period: ${VAL} Seconds"
     echo "---------------------------------------------------------------------"
-    
+
     for (( RUN=1; RUN<=RUNS; RUN++ )); do
         echo ""
         echo "🔄 [Validity ${VAL}s | Run ${RUN}/${RUNS}] Launching simulation..."
-        
-        # Determine config directory name: remote_auth when REMOTE_AUTH=1, otherwise local_auth
-        if [ "${REMOTE_AUTH:-0}" = "1" ]; then
+
+        # Determine config directory name based on auth mode
+        if [ "$AUTH_MODE" = "remote" ]; then
             AUTH_DIR="remote_auth"
         else
             AUTH_DIR="local_auth"
         fi
-        
+
         # Prepare environment variables for Docker compose
         CONFIG_PATH="/app/sst_config_creds/${AUTH_DIR}/testing/validity/val${VAL}/client_val_${VAL}.config"
         if [ ! -f "$OPENPI_DIR/sst_config_creds/${AUTH_DIR}/testing/validity/val${VAL}/client_val_${VAL}.config" ]; then
@@ -144,25 +230,29 @@ for VAL in "${VALIDITY_PERIODS[@]}"; do
         export TEST_VALIDITY_PERIOD="${VAL}"
         export TEST_RUN_ITERATION="${RUN}"
         export TEST_TOTAL_RUNS="${RUNS}"
-        
+
         # Run Docker simulation with --build flag and auto-exit when client finishes
         docker compose -f examples/aloha_sim/compose.yml up --build --abort-on-container-exit
         docker compose -f examples/aloha_sim/compose.yml down >/dev/null 2>&1 || true
-        
+
         # Find latest generated jsonl log file
         LOG_DIR="$OPENPI_DIR/data/aloha_sim/token_logs"
         LATEST_LOG="$(ls -t "$LOG_DIR"/*.jsonl 2>/dev/null | head -n 1 || true)"
-        
+
         if [ -z "$LATEST_LOG" ] || [ ! -f "$LATEST_LOG" ]; then
             echo "❌ Error: No .jsonl token log file generated in $LOG_DIR."
             exit 1
         fi
-        
-        REPORT_FILE="$OPENPI_DIR/$REPORTS_DIR/val_${VAL}s_run_${RUN}.txt"
+
+        # Copy the source .jsonl log into the run output directory for archival
+        echo "📂 Copying source log $(basename "$LATEST_LOG") into run output folder..."
+        cp "$LATEST_LOG" "$OUTPUT_DIR/"
+
+        REPORT_FILE="$OUTPUT_DIR/val_${VAL}s_run_${RUN}.txt"
         echo "📊 Analyzing latency for run ${RUN} from log: $(basename "$LATEST_LOG")..."
-        
+
         python3 scripts/analyze_latency.py "$LATEST_LOG" -o "$REPORT_FILE"
-        
+
         # Extract and display the average monitor latency from the report
         if grep -i "Average Monitor Latency" "$REPORT_FILE" >/dev/null 2>&1; then
             LAT_VAL="$(grep -i "Average Monitor Latency" "$REPORT_FILE" | awk '{print $(NF-1)}')"
@@ -170,19 +260,26 @@ for VAL in "${VALIDITY_PERIODS[@]}"; do
         else
             echo "⚠️ Warning: Could not find 'Average Monitor Latency' in report."
         fi
-        
+
         # Small delay between runs to let sockets clear
         sleep 2
     done
 done
 
-# Step 5: Aggregation and Graph Plotting
+# ─────────────────────────────────────────────────────────────────────────────
+# Step 6: Aggregation and Graph Plotting
+# Both input reports and output graph/CSV land in the same OUTPUT_DIR
+# ─────────────────────────────────────────────────────────────────────────────
 echo ""
 echo "▶️  [Step 6/6] Aggregating results and generating matplotlib graph..."
-python3 scripts/test_validity_latency.py --aggregate-reports-dir "$REPORTS_DIR" --output-dir "$RESULTS_DIR" --runs "$RUNS" --validities "${VALIDITY_PERIODS[@]}"
+python3 scripts/test_validity_latency.py \
+    --aggregate-reports-dir "$OUTPUT_DIR" \
+    --output-dir "$OUTPUT_DIR" \
+    --runs "$RUNS" \
+    --validities "${VALIDITY_PERIODS[@]}"
 
 echo ""
 echo "====================================================================="
 echo "🎉 All tests complete! Summary table and graph generated in:"
-echo "   $OPENPI_DIR/$RESULTS_DIR/"
+echo "   $OUTPUT_DIR/"
 echo "====================================================================="
