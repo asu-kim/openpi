@@ -283,7 +283,7 @@ if [ "$TEST_NAME" = "test1" ]; then
         done
     done
 elif [ "$TEST_NAME" = "test2" ]; then
-    THRESHOLDS=(0.0 0.25 0.50 0.75 1.0)
+    THRESHOLDS=(0.00 0.15 0.38 0.45 0.55)
     VAL="1"  # Fixed validity period of 1s as requested by user
     for THRESH in "${THRESHOLDS[@]}"; do
         echo ""

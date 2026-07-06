@@ -481,7 +481,7 @@ def generate_test2_plots_and_reports(thresholds: list, results: dict, worst_case
                          textcoords="offset points", xytext=(0, 12),
                          ha='center', fontweight='bold', color=color_lat)
 
-        ax1.set_xlabel('Motion Threshold Value (0.0 to 1.0)', fontsize=12, labelpad=10)
+        ax1.set_xlabel('Motion Threshold Value (Peak-to-Peak Joint Variation)', fontsize=12, labelpad=10)
         ax1.set_ylabel('Avg Monitor Latency (ms)', fontsize=12, color=color_lat, labelpad=10)
         ax1.tick_params(axis='y', labelcolor=color_lat)
         ax1.set_ylim(0, 100)
