@@ -246,6 +246,8 @@ def generate_plots_and_reports(validities: list, results: dict, worst_case_resul
         ax1.set_xlabel('Relative Validity Period (seconds)', fontsize=12, labelpad=10)
         ax1.set_ylabel('Avg Monitor Latency (ms)', fontsize=12, color=color_avg, labelpad=10)
         ax1.tick_params(axis='y', labelcolor=color_avg)
+        ax1.set_ylim(0, 100)
+        ax1.set_yticks(range(0, 101, 10))
         ax1.set_xticks(validities)
         ax1.set_xticklabels([f"{v}s" for v in validities], fontsize=11)
         ax1.grid(True, linestyle='--', alpha=0.4)
@@ -270,7 +272,7 @@ def generate_plots_and_reports(validities: list, results: dict, worst_case_resul
         lines2, labels2 = ax2.get_legend_handles_labels()
         ax1.legend(lines1 + lines2, labels1 + labels2,
                    frameon=True, facecolor='white', framealpha=0.9, fontsize=10,
-                   loc='upper left')
+                   loc='upper right')
 
         # Dynamic title and filenames
         test_label = test_name.upper()
