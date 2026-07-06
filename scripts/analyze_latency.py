@@ -23,6 +23,9 @@ def analyze_latencies(input_file: str, output_file: str):
                 mon_match = re.search(r'"monitor_latency":\s*([\d\.]+)', line)
                 if mon_match:
                     record["monitor_latency"] = float(mon_match.group(1))
+                lbl_match = re.search(r'"motion_label":\s*"([^"]+)"', line)
+                if lbl_match:
+                    record["motion_label"] = lbl_match.group(1)
                 records.append(record)
             else:
                 try:
@@ -97,6 +100,23 @@ def analyze_latencies(input_file: str, output_file: str):
             out.write(f"Worst-Case Monitor Lat.:{max_mon:.2f} ms\n")
             out.write(f"  └─ Occurred at Record {worst_mon_idx}\n")
 
+            motion_lats = [r["motion_label"] for r in records if "motion_label" in r]
+            if motion_lats:
+                total_lbl = len(motion_lats)
+                active_cnt = sum(1 for l in motion_lats if l == "active")
+                still_cnt = sum(1 for l in motion_lats if l == "still")
+                active_rate = (active_cnt / total_lbl) * 100.0 if total_lbl else 0.0
+                still_rate = (still_cnt / total_lbl) * 100.0 if total_lbl else 0.0
+                
+                out.write("\n" + "=" * 50 + "\n")
+                out.write("SUMMARY STATISTICS (Motion Classification & Bypass)\n")
+                out.write("=" * 50 + "\n")
+                out.write(f"Total Labeled Records:  {total_lbl}\n")
+                out.write(f"Active Records:         {active_cnt} ({active_rate:.2f}%)\n")
+                out.write(f"Bypassed (Still):       {still_cnt} ({still_rate:.2f}%)\n")
+                out.write(f"Active Rate:            {active_rate:.2f}%\n")
+                out.write(f"Still Rate (Bypass):    {still_rate:.2f}%\n")
+
     print(f"✅ Analysis complete! Detailed report saved to: {output_file}")
     print("-" * 40)
     print(f"Total Records Analyzed: {len(records)}")
@@ -108,6 +128,15 @@ def analyze_latencies(input_file: str, output_file: str):
         print("-" * 40)
         print(f"Average Monitor Latency: {sum(vals)/len(vals):.2f} ms")
         print(f"Worst-Case Monitor Lat.: {max(vals):.2f} ms")
+        
+        motion_lats = [r["motion_label"] for r in records if "motion_label" in r]
+        if motion_lats:
+            total_lbl = len(motion_lats)
+            active_rate = (sum(1 for l in motion_lats if l == "active") / total_lbl) * 100.0 if total_lbl else 0.0
+            still_rate = (sum(1 for l in motion_lats if l == "still") / total_lbl) * 100.0 if total_lbl else 0.0
+            print("-" * 40)
+            print(f"Active Rate:             {active_rate:.2f}%")
+            print(f"Still Rate (Bypass):     {still_rate:.2f}%")
 
 
 if __name__ == "__main__":

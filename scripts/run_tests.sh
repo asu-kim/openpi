@@ -26,10 +26,11 @@ TEST_NAME=""
 AUTH_MODE=""
 AUTH_PASSWORD="1234"
 RUNS="5"
+BYPASS_MODE="still"
 
 if [ "$#" -eq 0 ]; then
     echo "❌ Error: No arguments provided."
-    echo "Usage: $0 --test1 --local|--remote [--password <pw>] [--runs <n>]"
+    echo "Usage: $0 --test1|--test2 --local|--remote [--password <pw>] [--runs <n>] [--bypass-mode still|active]"
     exit 1
 fi
 
@@ -40,8 +41,8 @@ while [[ "$#" -gt 0 ]]; do
             shift
             ;;
         --test2)
-            echo "❌ Error: --test2 is not implemented yet."
-            exit 1
+            TEST_NAME="test2"
+            shift
             ;;
         --test3)
             echo "❌ Error: --test3 is not implemented yet."
@@ -73,9 +74,18 @@ while [[ "$#" -gt 0 ]]; do
                 exit 1
             fi
             ;;
+        --bypass-mode)
+            if [[ -n "${2:-}" ]]; then
+                BYPASS_MODE="$2"
+                shift 2
+            else
+                echo "❌ Error: --bypass-mode requires a value (still or active)."
+                exit 1
+            fi
+            ;;
         *)
             echo "❌ Error: Unknown argument '$1'"
-            echo "Usage: $0 --test1 --local|--remote [--password <pw>] [--runs <n>]"
+            echo "Usage: $0 --test1|--test2 --local|--remote [--password <pw>] [--runs <n>] [--bypass-mode still|active]"
             exit 1
             ;;
     esac
@@ -83,14 +93,14 @@ done
 
 # Validate required flags
 if [ -z "$TEST_NAME" ]; then
-    echo "❌ Error: A test flag is required (e.g. --test1)."
-    echo "Usage: $0 --test1 --local|--remote [--password <pw>] [--runs <n>]"
+    echo "❌ Error: A test flag is required (e.g. --test1 or --test2)."
+    echo "Usage: $0 --test1|--test2 --local|--remote [--password <pw>] [--runs <n>] [--bypass-mode still|active]"
     exit 1
 fi
 
 if [ -z "$AUTH_MODE" ]; then
     echo "❌ Error: An auth mode flag is required (--local or --remote)."
-    echo "Usage: $0 --test1 --local|--remote [--password <pw>] [--runs <n>]"
+    echo "Usage: $0 --test1|--test2 --local|--remote [--password <pw>] [--runs <n>] [--bypass-mode still|active]"
     exit 1
 fi
 
@@ -199,72 +209,136 @@ echo ""
 echo "▶️  [Step 5/6] Executing Docker simulation loops across validity periods..."
 cd "$OPENPI_DIR"
 
-for VAL in "${VALIDITY_PERIODS[@]}"; do
-    echo ""
-    echo "---------------------------------------------------------------------"
-    echo "  Testing Validity Period: ${VAL} Seconds"
-    echo "---------------------------------------------------------------------"
-
-    for (( RUN=1; RUN<=RUNS; RUN++ )); do
+if [ "$TEST_NAME" = "test1" ]; then
+    for VAL in "${VALIDITY_PERIODS[@]}"; do
         echo ""
-        echo "🔄 [Validity ${VAL}s | Run ${RUN}/${RUNS}] Launching simulation..."
+        echo "---------------------------------------------------------------------"
+        echo "  Testing Validity Period: ${VAL} Seconds"
+        echo "---------------------------------------------------------------------"
 
-        # Determine config directory name based on auth mode
-        if [ "$AUTH_MODE" = "remote" ]; then
-            AUTH_DIR="remote_auth"
-        else
-            AUTH_DIR="local_auth"
-        fi
+        for (( RUN=1; RUN<=RUNS; RUN++ )); do
+            echo ""
+            echo "🔄 [Validity ${VAL}s | Run ${RUN}/${RUNS}] Launching simulation..."
 
-        # Prepare environment variables for Docker compose
-        CONFIG_PATH="/app/sst_config_creds/${AUTH_DIR}/testing/validity/val${VAL}/client_val_${VAL}.config"
-        if [ ! -f "$OPENPI_DIR/sst_config_creds/${AUTH_DIR}/testing/validity/val${VAL}/client_val_${VAL}.config" ]; then
-            if [ -f "$OPENPI_DIR/sst_config_creds/${AUTH_DIR}/validity/val${VAL}/client_val_${VAL}.config" ]; then
-                CONFIG_PATH="/app/sst_config_creds/${AUTH_DIR}/validity/val${VAL}/client_val_${VAL}.config"
+            # Determine config directory name based on auth mode
+            if [ "$AUTH_MODE" = "remote" ]; then
+                AUTH_DIR="remote_auth"
+            else
+                AUTH_DIR="local_auth"
             fi
-        fi
-        export MONITOR_CONFIG="$CONFIG_PATH"
-        export OPENPI_MOTION_THRESHOLD="0"
-        export ALOHA_MAX_EPISODE_STEPS="${ALOHA_MAX_EPISODE_STEPS:-300}"
-        export ALOHA_NUM_EPISODES="${ALOHA_NUM_EPISODES:-1}"
-        export TEST_VALIDITY_PERIOD="${VAL}"
-        export TEST_RUN_ITERATION="${RUN}"
-        export TEST_TOTAL_RUNS="${RUNS}"
 
-        # Run Docker simulation with --build flag and auto-exit when client finishes
-        docker compose -f examples/aloha_sim/compose.yml up --build --abort-on-container-exit
-        docker compose -f examples/aloha_sim/compose.yml down >/dev/null 2>&1 || true
+            # Prepare environment variables for Docker compose
+            CONFIG_PATH="/app/sst_config_creds/${AUTH_DIR}/testing/validity/val${VAL}/client_val_${VAL}.config"
+            if [ ! -f "$OPENPI_DIR/sst_config_creds/${AUTH_DIR}/testing/validity/val${VAL}/client_val_${VAL}.config" ]; then
+                if [ -f "$OPENPI_DIR/sst_config_creds/${AUTH_DIR}/validity/val${VAL}/client_val_${VAL}.config" ]; then
+                    CONFIG_PATH="/app/sst_config_creds/${AUTH_DIR}/validity/val${VAL}/client_val_${VAL}.config"
+                fi
+            fi
+            export MONITOR_CONFIG="$CONFIG_PATH"
+            export OPENPI_MOTION_THRESHOLD="0"
+            export ALOHA_MAX_EPISODE_STEPS="${ALOHA_MAX_EPISODE_STEPS:-300}"
+            export ALOHA_NUM_EPISODES="${ALOHA_NUM_EPISODES:-1}"
+            export TEST_VALIDITY_PERIOD="${VAL}"
+            export TEST_RUN_ITERATION="${RUN}"
+            export TEST_TOTAL_RUNS="${RUNS}"
 
-        # Find latest generated jsonl log file
-        LOG_DIR="$OPENPI_DIR/data/aloha_sim/token_logs"
-        LATEST_LOG="$(ls -t "$LOG_DIR"/*.jsonl 2>/dev/null | head -n 1 || true)"
+            # Run Docker simulation with --build flag and auto-exit when client finishes
+            docker compose -f examples/aloha_sim/compose.yml up --build --abort-on-container-exit
+            docker compose -f examples/aloha_sim/compose.yml down >/dev/null 2>&1 || true
 
-        if [ -z "$LATEST_LOG" ] || [ ! -f "$LATEST_LOG" ]; then
-            echo "❌ Error: No .jsonl token log file generated in $LOG_DIR."
-            exit 1
-        fi
+            # Find latest generated jsonl log file
+            LOG_DIR="$OPENPI_DIR/data/aloha_sim/token_logs"
+            LATEST_LOG="$(ls -t "$LOG_DIR"/*.jsonl 2>/dev/null | head -n 1 || true)"
 
-        # Copy the source .jsonl log into the run output directory for archival
-        echo "📂 Copying source log $(basename "$LATEST_LOG") into run output folder..."
-        cp "$LATEST_LOG" "$OUTPUT_DIR/"
+            if [ -z "$LATEST_LOG" ] || [ ! -f "$LATEST_LOG" ]; then
+                echo "❌ Error: No .jsonl token log file generated in $LOG_DIR."
+                exit 1
+            fi
 
-        REPORT_FILE="$OUTPUT_DIR/val_${VAL}s_run_${RUN}.txt"
-        echo "📊 Analyzing latency for run ${RUN} from log: $(basename "$LATEST_LOG")..."
+            # Copy the source .jsonl log into the run output directory for archival
+            echo "📂 Copying source log $(basename "$LATEST_LOG") into run output folder..."
+            cp "$LATEST_LOG" "$OUTPUT_DIR/"
 
-        python3 scripts/analyze_latency.py "$LATEST_LOG" -o "$REPORT_FILE"
+            REPORT_FILE="$OUTPUT_DIR/val_${VAL}s_run_${RUN}.txt"
+            echo "📊 Analyzing latency for run ${RUN} from log: $(basename "$LATEST_LOG")..."
 
-        # Extract and display the average monitor latency from the report
-        if grep -i "Average Monitor Latency" "$REPORT_FILE" >/dev/null 2>&1; then
-            LAT_VAL="$(grep -i "Average Monitor Latency" "$REPORT_FILE" | awk '{print $(NF-1)}')"
-            echo "✅ Run ${RUN} completed -> Average Monitor Latency: ${LAT_VAL} ms"
-        else
-            echo "⚠️ Warning: Could not find 'Average Monitor Latency' in report."
-        fi
+            python3 scripts/analyze_latency.py "$LATEST_LOG" -o "$REPORT_FILE"
 
-        # Small delay between runs to let sockets clear
-        sleep 2
+            # Extract and display the average monitor latency from the report
+            if grep -i "Average Monitor Latency" "$REPORT_FILE" >/dev/null 2>&1; then
+                LAT_VAL="$(grep -i "Average Monitor Latency" "$REPORT_FILE" | awk '{print $(NF-1)}')"
+                echo "✅ Run ${RUN} completed -> Average Monitor Latency: ${LAT_VAL} ms"
+            else
+                echo "⚠️ Warning: Could not find 'Average Monitor Latency' in report."
+            fi
+
+            # Small delay between runs to let sockets clear
+            sleep 2
+        done
     done
-done
+elif [ "$TEST_NAME" = "test2" ]; then
+    THRESHOLDS=(0.0 0.25 0.50 0.75 1.0)
+    VAL="1"  # Fixed validity period of 1s as requested by user
+    for THRESH in "${THRESHOLDS[@]}"; do
+        echo ""
+        echo "---------------------------------------------------------------------"
+        echo "  Testing Motion Threshold: ${THRESH} (Fixed Validity: ${VAL}s)"
+        echo "---------------------------------------------------------------------"
+
+        for (( RUN=1; RUN<=RUNS; RUN++ )); do
+            echo ""
+            echo "🔄 [Threshold ${THRESH} | Run ${RUN}/${RUNS}] Launching simulation..."
+
+            if [ "$AUTH_MODE" = "remote" ]; then
+                AUTH_DIR="remote_auth"
+            else
+                AUTH_DIR="local_auth"
+            fi
+
+            CONFIG_PATH="/app/sst_config_creds/${AUTH_DIR}/testing/validity/val${VAL}/client_val_${VAL}.config"
+            if [ ! -f "$OPENPI_DIR/sst_config_creds/${AUTH_DIR}/testing/validity/val${VAL}/client_val_${VAL}.config" ]; then
+                if [ -f "$OPENPI_DIR/sst_config_creds/${AUTH_DIR}/validity/val${VAL}/client_val_${VAL}.config" ]; then
+                    CONFIG_PATH="/app/sst_config_creds/${AUTH_DIR}/validity/val${VAL}/client_val_${VAL}.config"
+                fi
+            fi
+            export MONITOR_CONFIG="$CONFIG_PATH"
+            export OPENPI_MOTION_THRESHOLD="$THRESH"
+            export ALOHA_MAX_EPISODE_STEPS="${ALOHA_MAX_EPISODE_STEPS:-300}"
+            export ALOHA_NUM_EPISODES="${ALOHA_NUM_EPISODES:-1}"
+            export TEST_VALIDITY_PERIOD="${VAL}"
+            export TEST_RUN_ITERATION="${RUN}"
+            export TEST_TOTAL_RUNS="${RUNS}"
+
+            docker compose -f examples/aloha_sim/compose.yml up --build --abort-on-container-exit
+            docker compose -f examples/aloha_sim/compose.yml down >/dev/null 2>&1 || true
+
+            LOG_DIR="$OPENPI_DIR/data/aloha_sim/token_logs"
+            LATEST_LOG="$(ls -t "$LOG_DIR"/*.jsonl 2>/dev/null | head -n 1 || true)"
+
+            if [ -z "$LATEST_LOG" ] || [ ! -f "$LATEST_LOG" ]; then
+                echo "❌ Error: No .jsonl token log file generated in $LOG_DIR."
+                exit 1
+            fi
+
+            echo "📂 Copying source log $(basename "$LATEST_LOG") into run output folder..."
+            cp "$LATEST_LOG" "$OUTPUT_DIR/"
+
+            REPORT_FILE="$OUTPUT_DIR/thresh_${THRESH}_run_${RUN}.txt"
+            echo "📊 Analyzing latency and bypass rate for run ${RUN} from log: $(basename "$LATEST_LOG")..."
+
+            python3 scripts/analyze_latency.py "$LATEST_LOG" -o "$REPORT_FILE"
+
+            if grep -i "Average Monitor Latency" "$REPORT_FILE" >/dev/null 2>&1; then
+                LAT_VAL="$(grep -i "Average Monitor Latency" "$REPORT_FILE" | awk '{print $(NF-1)}')"
+                echo "✅ Run ${RUN} completed -> Average Monitor Latency: ${LAT_VAL} ms"
+            else
+                echo "⚠️ Warning: Could not find 'Average Monitor Latency' in report."
+            fi
+
+            sleep 2
+        done
+    done
+fi
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Step 6: Aggregation and Graph Plotting
@@ -272,7 +346,7 @@ done
 # ─────────────────────────────────────────────────────────────────────────────
 echo ""
 echo "▶️  [Step 6/6] Aggregating results and generating matplotlib graph..."
-python3 scripts/plot_results.py --reports-dir "$OUTPUT_DIR"
+python3 scripts/plot_results.py --reports-dir "$OUTPUT_DIR" --bypass-mode "$BYPASS_MODE"
 
 echo ""
 echo "====================================================================="

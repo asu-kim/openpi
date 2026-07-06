@@ -204,7 +204,7 @@ class ActionMonitor:
         exec_time_ms = (end_time - start_time) * 1000
         print(f"  -> [Monitor] Execution time: {exec_time_ms:.2f} ms")
         print("="*75)
-        self.append_latency_to_log(record_idx, exec_time_ms)
+        self.append_latency_to_log(record_idx, exec_time_ms, motion_label=label)
         
         if not allowed:
             # Block motion safely for absolute joint angles:
@@ -215,7 +215,7 @@ class ActionMonitor:
             
         return actions
 
-    def append_latency_to_log(self, record_idx: int, latency_ms: float):
+    def append_latency_to_log(self, record_idx: int, latency_ms: float, motion_label: str = None):
         if record_idx < 0:
             return
         log_dir = "data/aloha_sim/token_logs"
@@ -236,11 +236,13 @@ class ActionMonitor:
             for i in range(len(lines) - 1, -1, -1):
                 line = lines[i]
                 if re.search(rf'"record_index":\s*{record_idx}\b', line):
+                    label_str = f', "motion_label": "{motion_label}"' if motion_label else ""
                     if '"monitor_latency"' in line:
-                        lines[i] = re.sub(r'"monitor_latency":\s*[\d\.]+\s*,', f'"monitor_latency": {round(latency_ms, 2)},', line, count=1)
+                        line = re.sub(r',\s*"motion_label":\s*"[^"]*"', '', line)
+                        lines[i] = re.sub(r'"monitor_latency":\s*[\d\.]+\s*,', f'"monitor_latency": {round(latency_ms, 2)}{label_str},', line, count=1)
                     else:
                         pattern = r'("time_iso":\s*"[^"]+"\s*,)'
-                        lines[i] = re.sub(pattern, rf'\1 "monitor_latency": {round(latency_ms, 2)},', line, count=1)
+                        lines[i] = re.sub(pattern, rf'\1 "monitor_latency": {round(latency_ms, 2)}{label_str},', line, count=1)
                     updated = True
                     break
             
