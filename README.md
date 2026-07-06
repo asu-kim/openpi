@@ -307,6 +307,109 @@ JAX and PyTorch implementations handle precision as follows:
 
 With torch.compile, inference speed is comparable between JAX and PyTorch.
 
+
+## Automated Latency Testing
+
+The `scripts/run_tests.sh` script is the central entry point for running automated performance tests against the ALOHA simulation. It orchestrates the full pipeline: setting up auth, running Docker simulation loops, collecting token logs, and producing a final report and graph — all stored in a structured, timestamped output directory.
+
+### Prerequisites
+
+The following are always required regardless of auth mode:
+
+- Docker and Docker Compose installed and running
+- `examples/aloha_sim/compose.yml` present and configured
+- Python virtual environment at `.venv/` with `matplotlib` installed (used for graph generation)
+- The sibling `iotauth/` repository cloned next to this repo (`../iotauth/`)
+
+#### `--local` mode (additional requirements)
+
+In local mode the script **generates** all certificates and keys itself via the IoTAuth tooling — no pre-existing `.pem` files are needed. You do need:
+
+- IoTAuth Auth101 server JAR built:
+  ```
+  iotauth/auth/auth-server/target/auth-server-jar-with-dependencies.jar
+  ```
+- IoTAuth example scripts present and executable:
+  ```
+  iotauth/examples/cleanAll.sh
+  iotauth/examples/generateAll.sh
+  iotauth/examples/configs/context_based_validity.graph
+  ```
+- Auth101 properties file:
+  ```
+  iotauth/auth/auth-server/../properties/exampleAuth101.properties
+  ```
+- Port `21900` free on the local machine (the script will kill any existing process on that port)
+
+The script will automatically generate and copy the required `.pem` and `.config` files into `sst_config_creds/local_auth/testing/validity/val{1,3,5,7}/` on each run.
+
+#### `--remote` mode (additional requirements)
+
+In remote mode the script skips all certificate generation and Auth101 server startup, so the following must already be in place **before** running:
+
+- A running Auth101 server reachable on port `21900` (remotely)
+- Per-validity config files for each validity period (`1`, `3`, `5`, `7` seconds) at one of these paths:
+  ```
+  sst_config_creds/remote_auth/testing/validity/val<N>/client_val_<N>.config
+  # or fallback:
+  sst_config_creds/remote_auth/validity/val<N>/client_val_<N>.config
+  ```
+- Any `.pem` certificate files referenced inside those config files must also be present at the paths they specify
+
+### Usage
+
+```bash
+# Run Test 1 with local Auth101 server (default password, 5 runs per validity period)
+./scripts/run_tests.sh --test1 --local
+
+# Run Test 1 with remote Auth101 server, custom password and run count
+./scripts/run_tests.sh --test1 --remote --password mypassword --runs 3
+```
+
+#### Flags
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--test1` | *(required)* | Run Test 1: Monitor Latency vs. Session Key Validity Period |
+| `--local` | *(required)* | Use a locally started Auth101 server |
+| `--remote` | *(required)* | Use a remotely running Auth101 server (skips local setup steps) |
+| `--password <pw>` | `1234` | Auth server password |
+| `--runs <n>` | `5` | Number of simulation runs per validity period |
+
+> **Note:** `--test1` and either `--local` or `--remote` are always required. `--test2` and `--test3` are reserved for future tests and will return an error if used.
+
+### Output Structure
+
+Each invocation creates a new timestamped folder so runs never overwrite each other:
+
+```
+test_reports/
+└── test1/
+    ├── local/
+    │   └── 2026-07-06-10-38-00/        ← one folder per run
+    │       ├── auth101.log              ← Auth server log (local mode only)
+    │       ├── val_1s_run_1.txt         ← per-run latency report
+    │       ├── val_1s_run_2.txt
+    │       ├── ...
+    │       ├── pi0_fast_tokens_<timestamp>.jsonl   ← copied source token log
+    │       ├── validity_vs_latency_same_device.csv ← aggregated summary table
+    │       ├── validity_vs_latency_report.txt
+    │       ├── test1_local_validity_vs_monitor_latency.png  ← graph
+    │       └── test1_local_validity_vs_monitor_latency.pdf
+    └── remote/
+        └── 2026-07-06-11-00-00/
+            └── ...
+```
+
+### Generated Graph
+
+The final graph (`test1_<local|remote>_validity_vs_monitor_latency.png`) plots two data series against the same X-axis (validity period in seconds):
+
+- **Left Y-axis** (blue): Average monitor latency across runs, with ±1 standard deviation error bars and individual run scatter points
+- **Right Y-axis** (red, dashed): Average of the worst-case monitor latency per run
+
+This dual-axis view makes it easy to compare typical vs. worst-case behaviour as the session key validity period changes.
+
 ## Troubleshooting
 
 We will collect common issues and their solutions here. If you encounter an issue, please check here first. If you can't find a solution, please file an issue on the repo (see [here](CONTRIBUTING.md) for guidelines).
