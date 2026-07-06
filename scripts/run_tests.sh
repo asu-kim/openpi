@@ -272,7 +272,7 @@ done
 # ─────────────────────────────────────────────────────────────────────────────
 echo ""
 echo "▶️  [Step 6/6] Aggregating results and generating matplotlib graph..."
-python3 scripts/test_validity_latency.py \
+python3 scripts/run_analysis.py \
     --aggregate-reports-dir "$OUTPUT_DIR" \
     --output-dir "$OUTPUT_DIR" \
     --runs "$RUNS" \
