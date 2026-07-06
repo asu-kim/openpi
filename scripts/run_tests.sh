@@ -112,12 +112,18 @@ RUN_TIMESTAMP="$(date +%Y-%m-%d-%H-%M-%S)"
 VALIDITY_PERIODS=(1 3 5 7)
 
 # Timestamped run output directory (reports + graphs + copied source data all land here)
-OUTPUT_DIR="$OPENPI_DIR/test_reports/$TEST_NAME/$AUTH_MODE/$RUN_TIMESTAMP"
+if [ "$TEST_NAME" = "test2" ]; then
+    OUTPUT_DIR="$OPENPI_DIR/test_reports/$TEST_NAME/$AUTH_MODE/$BYPASS_MODE/$RUN_TIMESTAMP"
+else
+    OUTPUT_DIR="$OPENPI_DIR/test_reports/$TEST_NAME/$AUTH_MODE/$RUN_TIMESTAMP"
+fi
 
 # Create the full test_reports hierarchy (including future test placeholders)
 mkdir -p "$OUTPUT_DIR"
-mkdir -p "$OPENPI_DIR/test_reports/test2/local"
-mkdir -p "$OPENPI_DIR/test_reports/test2/remote"
+mkdir -p "$OPENPI_DIR/test_reports/test2/local/still"
+mkdir -p "$OPENPI_DIR/test_reports/test2/local/active"
+mkdir -p "$OPENPI_DIR/test_reports/test2/remote/still"
+mkdir -p "$OPENPI_DIR/test_reports/test2/remote/active"
 mkdir -p "$OPENPI_DIR/test_reports/test3/local"
 mkdir -p "$OPENPI_DIR/test_reports/test3/remote"
 

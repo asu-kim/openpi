@@ -60,19 +60,24 @@ except ImportError:
                 pass
 
 
-def infer_test_context(reports_dir: Path) -> tuple[str, str]:
+def infer_test_context(reports_dir: Path) -> tuple[str, str, str]:
     """
-    Infer test_name and auth_mode from the reports_dir path.
-    Expected structure: ...test_reports/<test_name>/<auth_mode>/<timestamp>/
-    Returns (test_name, auth_mode) or (None, None) if structure doesn't match.
+    Infer test_name, auth_mode, and bypass_mode from the reports_dir path.
+    Expected structure:
+      Test 1: ...test_reports/<test_name>/<auth_mode>/<timestamp>/
+      Test 2: ...test_reports/<test_name>/<auth_mode>/<bypass_mode>/<timestamp>/
+    Returns (test_name, auth_mode, bypass_mode) or (None, None, None) if structure doesn't match.
     """
     parts = reports_dir.parts
     for i, part in enumerate(parts):
         if part == "test_reports" and i + 2 < len(parts):
             test_name = parts[i + 1]   # e.g. 'test1' or 'test2'
             auth_mode = parts[i + 2]   # e.g. 'local' or 'remote'
-            return test_name, auth_mode
-    return None, None
+            bypass_mode = None
+            if i + 3 < len(parts) and parts[i + 3] in ["still", "active"]:
+                bypass_mode = parts[i + 3]
+            return test_name, auth_mode, bypass_mode
+    return None, None, None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -567,13 +572,16 @@ def main():
         print(f"❌ Error: reports directory does not exist: {reports_dir}")
         sys.exit(1)
 
-    inferred_test, inferred_mode = infer_test_context(reports_dir)
+    inferred_test, inferred_mode, inferred_bypass = infer_test_context(reports_dir)
     test_name = args.test_name or inferred_test or "test1"
     auth_mode = args.auth_mode or inferred_mode or "local"
     if args.test_name is None and inferred_test:
         print(f"🔍 Auto-inferred test name: {test_name}")
     if args.auth_mode is None and inferred_mode:
         print(f"🔍 Auto-inferred auth mode: {auth_mode}")
+    if args.bypass_mode == "still" and inferred_bypass and inferred_bypass != "still":
+        args.bypass_mode = inferred_bypass
+        print(f"🔍 Auto-inferred bypass mode: {args.bypass_mode}")
 
     # Check if there are any Test 2 reports (thresh_*_run_*.txt) or explicitly requested test2
     is_test2 = (test_name.lower() == "test2") or list(reports_dir.glob("thresh_*_run_*.txt"))
