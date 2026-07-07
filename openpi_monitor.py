@@ -83,16 +83,21 @@ class ActionMonitor:
                 self.ctx = IoTAuthContext.from_config(abs_config_path)
                 print(f"Initialized IoTAuth Context successfully from {abs_config_path}")
             except Exception as first_err:
+                config_dir = os.path.dirname(abs_config_path)
                 target_dir = os.path.dirname(os.path.dirname(os.path.dirname(abs_config_path)))
-                if os.path.exists(target_dir) and os.path.isdir(target_dir):
-                    original_cwd = os.getcwd()
-                    os.chdir(target_dir)
-                    try:
-                        self.ctx = IoTAuthContext.from_config(abs_config_path)
-                        print(f"Initialized IoTAuth Context successfully from {abs_config_path} (after chdir to {target_dir})")
-                    finally:
-                        os.chdir(original_cwd)
-                else:
+                for d in [config_dir, target_dir]:
+                    if os.path.exists(d) and os.path.isdir(d):
+                        original_cwd = os.getcwd()
+                        os.chdir(d)
+                        try:
+                            self.ctx = IoTAuthContext.from_config(abs_config_path)
+                            print(f"Initialized IoTAuth Context successfully from {abs_config_path} (after chdir to {d})")
+                            break
+                        except Exception:
+                            pass
+                        finally:
+                            os.chdir(original_cwd)
+                if self.ctx is None:
                     raise first_err
                 
         except Exception as e:
