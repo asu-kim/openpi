@@ -349,10 +349,56 @@ fi
 # ─────────────────────────────────────────────────────────────────────────────
 # Step 6: Aggregation and Graph Plotting
 # Both input reports and output graph/CSV land in the same OUTPUT_DIR
+# For Test 1: if both local and remote result dirs are populated, generate two
+# separate comparative plots (avg latency and worst-case, each local vs remote).
+# Otherwise fall back to the legacy single-mode combined graph.
 # ─────────────────────────────────────────────────────────────────────────────
 echo ""
 echo "▶️  [Step 6/6] Aggregating results and generating matplotlib graph..."
-python3 scripts/plot_results.py --reports-dir "$OUTPUT_DIR" --bypass-mode "$BYPASS_MODE"
+
+if [ "$TEST_NAME" = "test1" ]; then
+    TEST1_BASE="$OPENPI_DIR/test_reports/test1"
+
+    # Determine the "other" auth mode directory
+    if [ "$AUTH_MODE" = "local" ]; then
+        OTHER_MODE="remote"
+    else
+        OTHER_MODE="local"
+    fi
+
+    OTHER_BASE="$TEST1_BASE/$OTHER_MODE"
+
+    # Find the latest timestamped run dir for the other auth mode (if any).
+    # A run dir is considered "complete" only when validity_vs_latency.csv exists —
+    # that file is written at the end of a successful plot_results.py run, so its
+    # presence guarantees the run fully finished (not just partially executed).
+    OTHER_CSV=""
+    if [ -d "$OTHER_BASE" ]; then
+        for dir in $(ls -dt "$OTHER_BASE"/*/  2>/dev/null); do
+            dir="${dir%/}"   # strip trailing slash
+            if [ -f "$dir/validity_vs_latency.csv" ]; then
+                OTHER_CSV="$dir/validity_vs_latency.csv"
+                break
+            fi
+        done
+    fi
+
+    if [ -n "$OTHER_CSV" ]; then
+        echo "🔀 Both local and remote Test 1 data found."
+        echo "   Primary ($AUTH_MODE): $OUTPUT_DIR"
+        echo "   Compare ($OTHER_MODE): $OTHER_CSV"
+        echo "   → Generating separate comparative plots (avg latency & worst-case)..."
+        python3 scripts/plot_results.py \
+            --reports-dir "$OUTPUT_DIR" \
+            --compare-csv "$OTHER_CSV" \
+            --bypass-mode "$BYPASS_MODE"
+    else
+        echo "ℹ️  Only $AUTH_MODE Test 1 data found. Using single-mode (combined) graph."
+        python3 scripts/plot_results.py --reports-dir "$OUTPUT_DIR" --bypass-mode "$BYPASS_MODE"
+    fi
+else
+    python3 scripts/plot_results.py --reports-dir "$OUTPUT_DIR" --bypass-mode "$BYPASS_MODE"
+fi
 
 echo ""
 echo "====================================================================="

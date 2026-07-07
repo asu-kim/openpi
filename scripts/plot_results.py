@@ -6,13 +6,20 @@ Reads pre-generated per-run report files from a timestamped test_reports/ direct
   - Test 1 (val_Xs_run_Y.txt): Validity vs. Average & Worst-Case Monitor Latency
   - Test 2 (thresh_X_run_Y.txt): Motion Threshold vs. Bypass Rate (%) & Latency
 
-Can be run independently on any existing test_reports/ run folder to regenerate
-or tweak graphs without re-running the full simulation:
+Test 1 pipeline (single source of truth):
+  val_*s_run_*.txt  →  validity_vs_latency.csv  →  PNG/PDF graphs
+  The CSV is always written first; graphs are always rendered from it.
 
+Can be run independently on any existing test_reports/ run folder:
+
+    # Single-mode (generates combined avg+worst-case graph)
+    python scripts/plot_results.py \
+        --reports-dir test_reports/test1/local/2026-07-06-10-38-00
+
+    # Comparative (generates separate avg and worst-case graphs, local vs remote)
     python scripts/plot_results.py \
         --reports-dir test_reports/test1/local/2026-07-06-10-38-00 \
-        --output-dir  test_reports/test1/local/2026-07-06-10-38-00 \
-        --test-name test1 --auth-mode local
+        --compare-csv test_reports/test1/remote/2026-07-06-11-00-00/validity_vs_latency.csv
 
     python scripts/plot_results.py \
         --reports-dir test_reports/test2/local/2026-07-06-11-00-00 \
@@ -157,104 +164,61 @@ def load_reports(reports_dir: Path, validities: list, runs: int) -> tuple[dict, 
     return results, worst_case_results
 
 
-def generate_plots_and_reports(validities: list, results: dict, worst_case_results: dict,
-                                output_dir: Path, test_name: str = "test1", auth_mode: str = "local"):
-    output_dir.mkdir(parents=True, exist_ok=True)
+# ─────────────────────────────────────────────────────────────────────────────
+# Test 1 CSV helpers — single source of truth for graph generation
+# ─────────────────────────────────────────────────────────────────────────────
 
-    summary_rows = []
-    avg_latencies = []
-    std_latencies = []
-    min_latencies = []
-    max_latencies = []
-    avg_worst_latencies = []
+TEST1_CSV_NAME = "validity_vs_latency.csv"
 
-    for val in validities:
-        runs = results[val]
-        avg = sum(runs) / len(runs) if runs else 0.0
-        min_val = min(runs) if runs else 0.0
-        max_val = max(runs) if runs else 0.0
-        variance = sum((x - avg) ** 2 for x in runs) / len(runs) if len(runs) > 1 else 0.0
-        std_val = variance ** 0.5
 
-        wc_runs = worst_case_results.get(val, [])
-        avg_wc = sum(wc_runs) / len(wc_runs) if wc_runs else 0.0
-
-        avg_latencies.append(avg)
-        std_latencies.append(std_val)
-        min_latencies.append(min_val)
-        max_latencies.append(max_val)
-        avg_worst_latencies.append(avg_wc)
-
-        summary_rows.append({
-            "validity_sec": val,
-            "runs": runs,
-            "avg": avg,
-            "std": std_val,
-            "min": min_val,
-            "max": max_val,
-            "avg_wc": avg_wc,
-        })
-
-    # Console table
-    print("\n" + "=" * 80)
-    print("VALIDITY vs. MONITOR LATENCY TEST RESULTS")
-    print("=" * 80)
-    num_runs = len(list(results.values())[0])
-    header = (f"{'Validity (s)':>12} | "
-              + " | ".join([f"Run {i+1} (ms)".rjust(10) for i in range(num_runs)])
-              + f" | {'Average (ms)':>12} | {'Std Dev':>10} | {'AvgWorstCase':>12}")
-    print(header)
-    print("-" * len(header))
-    for row in summary_rows:
-        runs_str = " | ".join([f"{r:>10.2f}" for r in row["runs"]])
-        print(f"{row['validity_sec']:>12.1f} | {runs_str} | {row['avg']:>12.2f} | {row['std']:>10.2f} | {row['avg_wc']:>12.2f}")
-    print("=" * 80)
-
-    # CSV
-    csv_path = output_dir / "validity_vs_latency_same_device.csv"
+def write_test1_csv(validities: list, avg_latencies: list, avg_wc_latencies: list,
+                    output_dir: Path) -> Path:
+    """
+    Write the aggregated Test 1 summary CSV.
+    Format: Validity_sec, Average_ms, AvgWorstCase_ms  (one row per validity period).
+    This is the single source of truth: graphs are always rendered from this file.
+    """
+    csv_path = output_dir / TEST1_CSV_NAME
     with open(csv_path, "w") as f:
-        run_headers = ",".join([f"Run_{i+1}_ms" for i in range(num_runs)])
-        f.write(f"Validity_sec,{run_headers},Average_ms,StdDev_ms,Min_ms,Max_ms,AvgWorstCase_ms\n")
-        for row in summary_rows:
-            runs_csv = ",".join([f"{r:.4f}" for r in row["runs"]])
-            f.write(f"{row['validity_sec']},{runs_csv},{row['avg']:.4f},{row['std']:.4f}"
-                    f",{row['min']:.4f},{row['max']:.4f},{row['avg_wc']:.4f}\n")
+        f.write("Validity_sec,Average_ms,AvgWorstCase_ms\n")
+        for val, avg, wc in zip(validities, avg_latencies, avg_wc_latencies):
+            f.write(f"{val:.1f},{avg:.4f},{wc:.4f}\n")
     print(f"📊 CSV saved to: {csv_path}")
+    return csv_path
 
-    # Text report
-    txt_path = output_dir / "validity_vs_latency_report.txt"
-    with open(txt_path, "w") as f:
-        f.write("VALIDITY PERIOD vs. MONITOR LATENCY TEST REPORT\n")
-        f.write("===============================================\n")
-        f.write(f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}\n\n")
-        f.write(header + "\n")
-        f.write("-" * len(header) + "\n")
-        for row in summary_rows:
-            runs_str = " | ".join([f"{r:>10.2f}" for r in row["runs"]])
-            f.write(f"{row['validity_sec']:>12.1f} | {runs_str} | {row['avg']:>12.2f}"
-                    f" | {row['std']:>10.2f} | {row['avg_wc']:>12.2f}\n")
-    print(f"📄 Text report saved to: {txt_path}")
 
-    # Graph
-    if not MATPLOTLIB_AVAILABLE:
-        print("\n⚠️  Warning: matplotlib is not available.")
-        return
+def read_test1_csv(csv_path: Path) -> tuple[list, list, list]:
+    """
+    Read a Test 1 summary CSV and return (validities, avg_latencies, avg_wc_latencies).
+    """
+    validities, avg_latencies, avg_wc_latencies = [], [], []
+    with open(csv_path) as f:
+        f.readline()  # skip header
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            parts = line.split(",")
+            if len(parts) >= 3:
+                validities.append(float(parts[0]))
+                avg_latencies.append(float(parts[1]))
+                avg_wc_latencies.append(float(parts[2]))
+    return validities, avg_latencies, avg_wc_latencies
 
+
+def _plot_single_mode(validities: list, avg_latencies: list, avg_wc_latencies: list,
+                      output_dir: Path, test_name: str, auth_mode: str):
+    """Render the single-mode graph (avg latency + worst-case on twin axes) from CSV data."""
     try:
-        fig, ax1 = plt.subplots(figsize=(11, 6), dpi=300)
-
         color_avg = '#1f77b4'
-        color_ind = '#2ca02c'
         color_wc  = '#d62728'
 
-        ax1.errorbar(validities, avg_latencies, yerr=std_latencies,
-                     marker='o', markersize=8, linewidth=2.5,
-                     capsize=6, capthick=2, color=color_avg,
-                     label='Avg Monitor Latency (±1 Std Dev)', ecolor='#ff7f0e')
+        fig, ax1 = plt.subplots(figsize=(11, 6), dpi=300)
+
+        ax1.plot(validities, avg_latencies,
+                 marker='o', markersize=8, linewidth=2.5, color=color_avg,
+                 label='Avg Monitor Latency')
         for i, val in enumerate(validities):
-            ax1.scatter([val] * len(results[val]), results[val],
-                        color=color_ind, alpha=0.6, s=30,
-                        label='Individual Runs' if i == 0 else "")
             ax1.annotate(f"{avg_latencies[i]:.2f} ms", (val, avg_latencies[i]),
                          textcoords="offset points", xytext=(0, 12),
                          ha='center', fontweight='bold', color=color_avg)
@@ -262,27 +226,25 @@ def generate_plots_and_reports(validities: list, results: dict, worst_case_resul
         ax1.set_xlabel('Relative Validity Period (seconds)', fontsize=12, labelpad=10)
         ax1.set_ylabel('Avg Monitor Latency (ms)', fontsize=12, color=color_avg, labelpad=10)
         ax1.tick_params(axis='y', labelcolor=color_avg)
-        ax1.set_ylim(0, 100)
-        ax1.set_yticks(range(0, 101, 10))
+        ax1.set_ylim(0, max(max(avg_latencies, default=0) * 1.4, 20))
         ax1.set_xticks(validities)
-        ax1.set_xticklabels([f"{v}s" for v in validities], fontsize=11)
+        ax1.set_xticklabels([f"{int(v)}s" for v in validities], fontsize=11)
         ax1.grid(True, linestyle='--', alpha=0.4)
 
         ax2 = ax1.twinx()
-        ax2.plot(validities, avg_worst_latencies,
+        ax2.plot(validities, avg_wc_latencies,
                  marker='s', markersize=8, linewidth=2.5,
                  linestyle='--', color=color_wc,
                  label='Avg Worst-Case Monitor Latency')
         for i, val in enumerate(validities):
-            ax2.annotate(f"{avg_worst_latencies[i]:.2f} ms", (val, avg_worst_latencies[i]),
+            ax2.annotate(f"{avg_wc_latencies[i]:.2f} ms", (val, avg_wc_latencies[i]),
                          textcoords="offset points", xytext=(0, -18),
                          ha='center', fontweight='bold', color=color_wc)
 
         ax2.set_ylabel('Avg Worst-Case Monitor Latency (ms)', fontsize=12,
                        color=color_wc, labelpad=10)
         ax2.tick_params(axis='y', labelcolor=color_wc)
-        ax2.set_ylim(0, 230)
-        ax2.set_yticks(range(0, 231, 10))
+        ax2.set_ylim(0, max(max(avg_wc_latencies, default=0) * 1.4, 20))
 
         lines1, labels1 = ax1.get_legend_handles_labels()
         lines2, labels2 = ax2.get_legend_handles_labels()
@@ -298,16 +260,193 @@ def generate_plots_and_reports(validities: list, results: dict, worst_case_resul
         fig.suptitle(plot_title, fontsize=14, fontweight='bold', y=1.01)
         fig.tight_layout()
 
-        png_path = output_dir / f"{file_stem}.png"
-        pdf_path = output_dir / f"{file_stem}.pdf"
-        fig.savefig(png_path, bbox_inches='tight')
-        fig.savefig(pdf_path, bbox_inches='tight')
+        fig.savefig(output_dir / f"{file_stem}.png", bbox_inches='tight')
+        fig.savefig(output_dir / f"{file_stem}.pdf", bbox_inches='tight')
         plt.close(fig)
-
-        print(f"📈 Graph (PNG) saved to: {png_path}")
-        print(f"📈 Graph (PDF) saved to: {pdf_path}")
+        print(f"📈 Graph (PNG) saved to: {output_dir / file_stem}.png")
+        print(f"📈 Graph (PDF) saved to: {output_dir / file_stem}.pdf")
     except Exception as e:
-        print(f"❌ Error generating graph: {e}")
+        print(f"❌ Error generating single-mode graph: {e}")
+
+
+def generate_plots_and_reports(validities: list, results: dict, worst_case_results: dict,
+                                output_dir: Path, test_name: str = "test1",
+                                auth_mode: str = "local") -> Path:
+    """
+    Test 1 pipeline:
+      1. Compute per-validity averages from raw run dicts.
+      2. Write validity_vs_latency.csv  (single source of truth).
+      3. Read the CSV back and render the single-mode graph from it.
+    Returns the path to the written CSV.
+    """
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Step 1 — compute simple averages (one number per validity period)
+    avg_latencies, avg_wc_latencies, summary_rows = [], [], []
+    for val in validities:
+        runs = results[val]
+        avg = sum(runs) / len(runs) if runs else 0.0
+        wc_runs = worst_case_results.get(val, [])
+        avg_wc = sum(wc_runs) / len(wc_runs) if wc_runs else 0.0
+        avg_latencies.append(avg)
+        avg_wc_latencies.append(avg_wc)
+        summary_rows.append({"validity_sec": val, "avg": avg, "avg_wc": avg_wc})
+
+    # Console table
+    print("\n" + "=" * 62)
+    print("VALIDITY vs. MONITOR LATENCY TEST RESULTS")
+    print("=" * 62)
+    header = f"{'Validity (s)':>12} | {'Average (ms)':>14} | {'Avg Worst-Case (ms)':>20}"
+    print(header)
+    print("-" * len(header))
+    for row in summary_rows:
+        print(f"{row['validity_sec']:>12.1f} | {row['avg']:>14.2f} | {row['avg_wc']:>20.2f}")
+    print("=" * 62)
+
+    # Text report
+    txt_path = output_dir / "validity_vs_latency_report.txt"
+    with open(txt_path, "w") as f:
+        f.write("VALIDITY PERIOD vs. MONITOR LATENCY TEST REPORT\n")
+        f.write("===============================================\n")
+        f.write(f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+        f.write(header + "\n")
+        f.write("-" * len(header) + "\n")
+        for row in summary_rows:
+            f.write(f"{row['validity_sec']:>12.1f} | {row['avg']:>14.2f} | {row['avg_wc']:>20.2f}\n")
+    print(f"📄 Text report saved to: {txt_path}")
+
+    # Step 2 — write CSV (source of truth)
+    csv_path = write_test1_csv(validities, avg_latencies, avg_wc_latencies, output_dir)
+
+    if not MATPLOTLIB_AVAILABLE:
+        print("\n⚠️  Warning: matplotlib is not available — graphs skipped.")
+        return csv_path
+
+    # Step 3 — render graph by reading back from CSV
+    v, avg_lats, avg_wc_lats = read_test1_csv(csv_path)
+    _plot_single_mode(v, avg_lats, avg_wc_lats, output_dir, test_name, auth_mode)
+
+    return csv_path
+
+
+def generate_comparative_plots(local_csv: Path, remote_csv: Path,
+                               output_dir: Path, test_name: str = "test1"):
+    """
+    Generate two separate comparison plots for Test 1 by reading directly from
+    two pre-existing validity_vs_latency.csv files (local and remote):
+      1. Average Latency     — Local vs. Remote
+      2. Worst-Case Latency  — Local vs. Remote
+    Both CSVs must exist; this function does not re-read any txt files.
+    """
+    if not MATPLOTLIB_AVAILABLE:
+        print("\n⚠️  Warning: matplotlib is not available — comparative plots skipped.")
+        return
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Read both CSVs (single source of truth)
+    local_v,  local_avg,  local_wc  = read_test1_csv(local_csv)
+    remote_v, remote_avg, remote_wc = read_test1_csv(remote_csv)
+
+    # Intersect on common validity periods
+    local_map_avg  = dict(zip(local_v,  local_avg))
+    local_map_wc   = dict(zip(local_v,  local_wc))
+    remote_map_avg = dict(zip(remote_v, remote_avg))
+    remote_map_wc  = dict(zip(remote_v, remote_wc))
+
+    common_v = sorted(set(local_v) & set(remote_v))
+    if not common_v:
+        print("⚠️  No common validity periods between local and remote CSVs. "
+              "Cannot generate comparative plots.")
+        return
+
+    l_avg = [local_map_avg[v]  for v in common_v]
+    l_wc  = [local_map_wc[v]   for v in common_v]
+    r_avg = [remote_map_avg[v] for v in common_v]
+    r_wc  = [remote_map_wc[v]  for v in common_v]
+
+    x_labels   = [f"{int(v)}s" for v in common_v]
+    test_label = test_name.upper()
+
+    # ── Plot 1: Average Latency (Local vs Remote) ────────────────────────────
+    try:
+        fig, ax = plt.subplots(figsize=(11, 6), dpi=300)
+
+        color_local  = '#1f77b4'   # blue
+        color_remote = '#d62728'   # red
+
+        ax.plot(common_v, l_avg, marker='o', markersize=8, linewidth=2.5,
+                color=color_local,  label='Local Auth — Avg Latency')
+        ax.plot(common_v, r_avg, marker='s', markersize=8, linewidth=2.5,
+                color=color_remote, label='Remote Auth — Avg Latency', linestyle='--')
+
+        for i, val in enumerate(common_v):
+            ax.annotate(f"{l_avg[i]:.2f}", (val, l_avg[i]),
+                        textcoords="offset points", xytext=(-18, 8),
+                        ha='center', fontsize=9, fontweight='bold', color=color_local)
+            ax.annotate(f"{r_avg[i]:.2f}", (val, r_avg[i]),
+                        textcoords="offset points", xytext=(18, 8),
+                        ha='center', fontsize=9, fontweight='bold', color=color_remote)
+
+        ax.set_xlabel('Relative Validity Period (seconds)', fontsize=12, labelpad=10)
+        ax.set_ylabel('Average Monitor Latency (ms)', fontsize=12, labelpad=10)
+        ax.set_xticks(common_v)
+        ax.set_xticklabels(x_labels, fontsize=11)
+        ax.set_ylim(0, max(max(l_avg + r_avg, default=0) * 1.4, 20))
+        ax.grid(True, linestyle='--', alpha=0.4)
+        ax.legend(frameon=True, facecolor='white', framealpha=0.9, fontsize=10, loc='upper right')
+
+        plot_title = f"{test_label}: Average Monitor Latency vs. Validity Period — Local vs. Remote Auth"
+        fig.suptitle(plot_title, fontsize=14, fontweight='bold', y=1.01)
+        fig.tight_layout()
+
+        stem = f"{test_name}_avg_latency_local_vs_remote"
+        fig.savefig(output_dir / f"{stem}.png", bbox_inches='tight')
+        fig.savefig(output_dir / f"{stem}.pdf", bbox_inches='tight')
+        plt.close(fig)
+        print(f"📈 Comparative avg-latency graph saved to: {output_dir}/{stem}.png / .pdf")
+    except Exception as e:
+        print(f"❌ Error generating comparative avg-latency graph: {e}")
+
+    # ── Plot 2: Worst-Case Latency (Local vs Remote) ─────────────────────────
+    try:
+        fig, ax = plt.subplots(figsize=(11, 6), dpi=300)
+
+        color_local  = '#2ca02c'   # green
+        color_remote = '#9467bd'   # purple
+
+        ax.plot(common_v, l_wc, marker='o', markersize=8, linewidth=2.5,
+                color=color_local,  label='Local Auth — Avg Worst-Case Latency')
+        ax.plot(common_v, r_wc, marker='s', markersize=8, linewidth=2.5,
+                color=color_remote, label='Remote Auth — Avg Worst-Case Latency', linestyle='--')
+
+        for i, val in enumerate(common_v):
+            ax.annotate(f"{l_wc[i]:.2f}", (val, l_wc[i]),
+                        textcoords="offset points", xytext=(-18, 8),
+                        ha='center', fontsize=9, fontweight='bold', color=color_local)
+            ax.annotate(f"{r_wc[i]:.2f}", (val, r_wc[i]),
+                        textcoords="offset points", xytext=(18, 8),
+                        ha='center', fontsize=9, fontweight='bold', color=color_remote)
+
+        ax.set_xlabel('Relative Validity Period (seconds)', fontsize=12, labelpad=10)
+        ax.set_ylabel('Avg Worst-Case Monitor Latency (ms)', fontsize=12, labelpad=10)
+        ax.set_xticks(common_v)
+        ax.set_xticklabels(x_labels, fontsize=11)
+        ax.set_ylim(0, max(max(l_wc + r_wc, default=0) * 1.4, 20))
+        ax.grid(True, linestyle='--', alpha=0.4)
+        ax.legend(frameon=True, facecolor='white', framealpha=0.9, fontsize=10, loc='upper right')
+
+        plot_title = f"{test_label}: Worst-Case Monitor Latency vs. Validity Period — Local vs. Remote Auth"
+        fig.suptitle(plot_title, fontsize=14, fontweight='bold', y=1.01)
+        fig.tight_layout()
+
+        stem = f"{test_name}_worstcase_latency_local_vs_remote"
+        fig.savefig(output_dir / f"{stem}.png", bbox_inches='tight')
+        fig.savefig(output_dir / f"{stem}.pdf", bbox_inches='tight')
+        plt.close(fig)
+        print(f"📈 Comparative worst-case graph saved to: {output_dir}/{stem}.png / .pdf")
+    except Exception as e:
+        print(f"❌ Error generating comparative worst-case graph: {e}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -563,6 +702,13 @@ def main():
         "--bypass-mode", default="still", choices=["still", "active"],
         help="Definition of bypass rate for Test 2 graph: 'still' (percentage of still actions bypassed) or 'active' (percentage of active actions requiring auth)."
     )
+    parser.add_argument(
+        "--compare-csv", default=None,
+        help="(Test 1 only) Path to the other auth mode's validity_vs_latency.csv. "
+             "When provided, two separate comparative plots are generated (avg latency "
+             "and worst-case latency, each with local and remote on the same graph). "
+             "The CSV must have been produced by a completed plot_results.py run."
+    )
     args = parser.parse_args()
 
     reports_dir = Path(args.reports_dir).resolve()
@@ -603,6 +749,19 @@ def main():
         generate_test2_plots_and_reports(thresholds, results, wc_results, bypass_results,
                                          output_dir, test_name=test_name, auth_mode=auth_mode, bypass_mode=args.bypass_mode)
     else:
+        # ── Test 1: validity vs. monitor latency ──────────────────────────────
+        compare_dir = Path(args.compare_dir).resolve() if args.compare_dir else None
+
+        # Determine which mode is "primary" and which is the comparison
+        primary_mode = auth_mode
+        if compare_dir and compare_dir.exists():
+            # Infer the compare dir's auth mode from its path
+            _, cmp_inferred_mode, _ = infer_test_context(compare_dir)
+            cmp_auth_mode = cmp_inferred_mode or ("remote" if primary_mode == "local" else "local")
+        else:
+            cmp_auth_mode = None
+            compare_dir = None
+
         validities, runs = discover_reports(reports_dir)
         print("=" * 80)
         print("AGGREGATING TEST 1 REPORTS & GENERATING GRAPH")
@@ -612,11 +771,41 @@ def main():
         print(f"Validities  : {[int(v) for v in validities]} seconds")
         print(f"Runs        : {runs} per validity period")
         print(f"Test / Mode : {test_name} / {auth_mode}")
+        if compare_dir:
+            print(f"Compare dir : {compare_dir} ({cmp_auth_mode})")
         print("=" * 80)
 
         results, worst_case_results = load_reports(reports_dir, validities, runs)
-        generate_plots_and_reports(validities, results, worst_case_results,
-                                   output_dir, test_name=test_name, auth_mode=auth_mode)
+
+        # Step 1+2: txt → CSV (writes primary dir's validity_vs_latency.csv)
+        primary_csv = generate_plots_and_reports(
+            validities, results, worst_case_results,
+            output_dir, test_name=test_name, auth_mode=auth_mode,
+        )
+
+        # Step 3: if a compare CSV is provided, also generate comparative plots
+        compare_csv = Path(args.compare_csv).resolve() if args.compare_csv else None
+        if compare_csv:
+            if not compare_csv.exists():
+                print(f"⚠️  --compare-csv path not found: {compare_csv}. "
+                      "Skipping comparative plots.")
+            else:
+                # Infer the compare CSV's auth mode for labeling
+                _, cmp_mode, _ = infer_test_context(compare_csv.parent)
+                cmp_mode = cmp_mode or ("remote" if auth_mode == "local" else "local")
+
+                # Map local/remote CSV paths correctly regardless of which was primary
+                if auth_mode == "local":
+                    local_csv, remote_csv = primary_csv, compare_csv
+                else:
+                    local_csv, remote_csv = compare_csv, primary_csv
+
+                print(f"\n📊 Generating comparative plots from CSVs...")
+                print(f"   Local  CSV: {local_csv}")
+                print(f"   Remote CSV: {remote_csv}")
+                generate_comparative_plots(
+                    local_csv, remote_csv, output_dir, test_name=test_name,
+                )
     print("\n✅ Done!\n")
 
 
