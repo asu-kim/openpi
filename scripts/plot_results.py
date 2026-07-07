@@ -171,17 +171,18 @@ def load_reports(reports_dir: Path, validities: list, runs: int) -> tuple[dict, 
 TEST1_CSV_NAME = "validity_vs_latency.csv"
 
 
-def write_test1_csv(validities: list, avg_latencies: list, avg_wc_latencies: list,
+def write_test1_csv(validities: list, avg_latencies: list, wc_latencies: list,
                     output_dir: Path) -> Path:
     """
     Write the aggregated Test 1 summary CSV.
-    Format: Validity_sec, Average_ms, AvgWorstCase_ms  (one row per validity period).
+    Format: Validity_sec, Average_ms, WorstCase_ms  (one row per validity period).
+    WorstCase_ms is the absolute maximum worst-case latency observed across all runs.
     This is the single source of truth: graphs are always rendered from this file.
     """
     csv_path = output_dir / TEST1_CSV_NAME
     with open(csv_path, "w") as f:
-        f.write("Validity_sec,Average_ms,AvgWorstCase_ms\n")
-        for val, avg, wc in zip(validities, avg_latencies, avg_wc_latencies):
+        f.write("Validity_sec,Average_ms,WorstCase_ms\n")
+        for val, avg, wc in zip(validities, avg_latencies, wc_latencies):
             f.write(f"{val:.1f},{avg:.4f},{wc:.4f}\n")
     print(f"📊 CSV saved to: {csv_path}")
     return csv_path
@@ -189,9 +190,9 @@ def write_test1_csv(validities: list, avg_latencies: list, avg_wc_latencies: lis
 
 def read_test1_csv(csv_path: Path) -> tuple[list, list, list]:
     """
-    Read a Test 1 summary CSV and return (validities, avg_latencies, avg_wc_latencies).
+    Read a Test 1 summary CSV and return (validities, avg_latencies, wc_latencies).
     """
-    validities, avg_latencies, avg_wc_latencies = [], [], []
+    validities, avg_latencies, wc_latencies = [], [], []
     with open(csv_path) as f:
         f.readline()  # skip header
         for line in f:
@@ -202,11 +203,11 @@ def read_test1_csv(csv_path: Path) -> tuple[list, list, list]:
             if len(parts) >= 3:
                 validities.append(float(parts[0]))
                 avg_latencies.append(float(parts[1]))
-                avg_wc_latencies.append(float(parts[2]))
-    return validities, avg_latencies, avg_wc_latencies
+                wc_latencies.append(float(parts[2]))
+    return validities, avg_latencies, wc_latencies
 
 
-def _plot_single_mode(validities: list, avg_latencies: list, avg_wc_latencies: list,
+def _plot_single_mode(validities: list, avg_latencies: list, wc_latencies: list,
                       output_dir: Path, test_name: str, auth_mode: str):
     """Render the single-mode graph (avg latency + worst-case on twin axes) from CSV data."""
     try:
@@ -232,19 +233,19 @@ def _plot_single_mode(validities: list, avg_latencies: list, avg_wc_latencies: l
         ax1.grid(True, linestyle='--', alpha=0.4)
 
         ax2 = ax1.twinx()
-        ax2.plot(validities, avg_wc_latencies,
+        ax2.plot(validities, wc_latencies,
                  marker='s', markersize=8, linewidth=2.5,
                  linestyle='--', color=color_wc,
-                 label='Avg Worst-Case Monitor Latency')
+                 label='Worst-Case Monitor Latency')
         for i, val in enumerate(validities):
-            ax2.annotate(f"{avg_wc_latencies[i]:.2f} ms", (val, avg_wc_latencies[i]),
+            ax2.annotate(f"{wc_latencies[i]:.2f} ms", (val, wc_latencies[i]),
                          textcoords="offset points", xytext=(0, -18),
                          ha='center', fontweight='bold', color=color_wc)
 
-        ax2.set_ylabel('Avg Worst-Case Monitor Latency (ms)', fontsize=12,
+        ax2.set_ylabel('Worst-Case Monitor Latency (ms)', fontsize=12,
                        color=color_wc, labelpad=10)
         ax2.tick_params(axis='y', labelcolor=color_wc)
-        ax2.set_ylim(0, max(max(avg_wc_latencies, default=0) * 1.4, 20))
+        ax2.set_ylim(0, max(max(wc_latencies, default=0) * 1.4, 20))
 
         lines1, labels1 = ax1.get_legend_handles_labels()
         lines2, labels2 = ax2.get_legend_handles_labels()
@@ -282,25 +283,25 @@ def generate_plots_and_reports(validities: list, results: dict, worst_case_resul
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Step 1 — compute simple averages (one number per validity period)
-    avg_latencies, avg_wc_latencies, summary_rows = [], [], []
+    avg_latencies, wc_latencies, summary_rows = [], [], []
     for val in validities:
         runs = results[val]
         avg = sum(runs) / len(runs) if runs else 0.0
         wc_runs = worst_case_results.get(val, [])
-        avg_wc = sum(wc_runs) / len(wc_runs) if wc_runs else 0.0
+        wc = max(wc_runs) if wc_runs else 0.0   # absolute worst-case across all runs
         avg_latencies.append(avg)
-        avg_wc_latencies.append(avg_wc)
-        summary_rows.append({"validity_sec": val, "avg": avg, "avg_wc": avg_wc})
+        wc_latencies.append(wc)
+        summary_rows.append({"validity_sec": val, "avg": avg, "wc": wc})
 
     # Console table
     print("\n" + "=" * 62)
     print("VALIDITY vs. MONITOR LATENCY TEST RESULTS")
     print("=" * 62)
-    header = f"{'Validity (s)':>12} | {'Average (ms)':>14} | {'Avg Worst-Case (ms)':>20}"
+    header = f"{'Validity (s)':>12} | {'Average (ms)':>14} | {'Worst-Case (ms)':>16}"
     print(header)
     print("-" * len(header))
     for row in summary_rows:
-        print(f"{row['validity_sec']:>12.1f} | {row['avg']:>14.2f} | {row['avg_wc']:>20.2f}")
+        print(f"{row['validity_sec']:>12.1f} | {row['avg']:>14.2f} | {row['wc']:>16.2f}")
     print("=" * 62)
 
     # Text report
@@ -312,19 +313,19 @@ def generate_plots_and_reports(validities: list, results: dict, worst_case_resul
         f.write(header + "\n")
         f.write("-" * len(header) + "\n")
         for row in summary_rows:
-            f.write(f"{row['validity_sec']:>12.1f} | {row['avg']:>14.2f} | {row['avg_wc']:>20.2f}\n")
+            f.write(f"{row['validity_sec']:>12.1f} | {row['avg']:>14.2f} | {row['wc']:>16.2f}\n")
     print(f"📄 Text report saved to: {txt_path}")
 
     # Step 2 — write CSV (source of truth)
-    csv_path = write_test1_csv(validities, avg_latencies, avg_wc_latencies, output_dir)
+    csv_path = write_test1_csv(validities, avg_latencies, wc_latencies, output_dir)
 
     if not MATPLOTLIB_AVAILABLE:
         print("\n⚠️  Warning: matplotlib is not available — graphs skipped.")
         return csv_path
 
     # Step 3 — render graph by reading back from CSV
-    v, avg_lats, avg_wc_lats = read_test1_csv(csv_path)
-    _plot_single_mode(v, avg_lats, avg_wc_lats, output_dir, test_name, auth_mode)
+    v, avg_lats, wc_lats = read_test1_csv(csv_path)
+    _plot_single_mode(v, avg_lats, wc_lats, output_dir, test_name, auth_mode)
 
     return csv_path
 
@@ -416,9 +417,9 @@ def generate_comparative_plots(local_csv: Path, remote_csv: Path,
         color_remote = '#9467bd'   # purple
 
         ax.plot(common_v, l_wc, marker='o', markersize=8, linewidth=2.5,
-                color=color_local,  label='Local Auth — Avg Worst-Case Latency')
+                color=color_local,  label='Local Auth — Worst-Case Latency')
         ax.plot(common_v, r_wc, marker='s', markersize=8, linewidth=2.5,
-                color=color_remote, label='Remote Auth — Avg Worst-Case Latency', linestyle='--')
+                color=color_remote, label='Remote Auth — Worst-Case Latency', linestyle='--')
 
         for i, val in enumerate(common_v):
             ax.annotate(f"{l_wc[i]:.2f}", (val, l_wc[i]),
@@ -429,7 +430,7 @@ def generate_comparative_plots(local_csv: Path, remote_csv: Path,
                         ha='center', fontsize=9, fontweight='bold', color=color_remote)
 
         ax.set_xlabel('Relative Validity Period (seconds)', fontsize=12, labelpad=10)
-        ax.set_ylabel('Avg Worst-Case Monitor Latency (ms)', fontsize=12, labelpad=10)
+        ax.set_ylabel('Worst-Case Monitor Latency (ms)', fontsize=12, labelpad=10)
         ax.set_xticks(common_v)
         ax.set_xticklabels(x_labels, fontsize=11)
         ax.set_ylim(0, max(max(l_wc + r_wc, default=0) * 1.4, 20))
