@@ -183,8 +183,9 @@ if [ "$AUTH_MODE" = "local" ]; then
     ./generateAll.sh -g configs/context_based_validity.graph -p "$AUTH_PASSWORD" -lc
 
     echo ""
-    echo "▶️  [Step 3/6] Rebuilding local_auth/testing/validity/ from graph policies..."
+    echo "▶️  [Step 3/6] Rebuilding local_auth/testing/validity/ from IoTAuth-generated configs..."
     VALIDITY_BASE="$OPENPI_DIR/sst_config_creds/local_auth/testing/validity"
+    IOTAUTH_CONFIGS="$IOTAUTH_DIR/entity/node/example_entities/configs/net1"
 
     # Wipe the entire validity directory so stale val* folders from old runs are gone
     rm -rf "$VALIDITY_BASE"
@@ -194,66 +195,24 @@ if [ "$AUTH_MODE" = "local" ]; then
         dest_dir="$VALIDITY_BASE/val${val}"
         mkdir -p "$dest_dir"
 
-        # Generate client config from template (no pre-existing static files needed)
-        cat > "$dest_dir/client_val_${val}.config" << EOF
-{
-	"entityInfo": {
-		"name": "net1.client_val_${val}",
-		"group": "Clients_val_${val}",
-		"distProtocol": "TCP",
-		"usePermanentDistKey": false,
-		"connectionTimeout": 5000,
-		"privateKey": "../../credentials/keys/net1/Net1.Client_val_${val}Key.pem"
-	},
-	"authInfo": {
-		"id": 101,
-		"host": "localhost",
-		"port": 21900,
-		"publicKey": "../../auth_certs/Auth101EntityCert.pem"
-	},
-	"migrationInfo": [],
-	"cryptoInfo": {
-		"publicKeyCryptoSpec": {
-			"sign": "RSA-SHA256",
-			"padding": "RSA_PKCS1_OAEP_PADDING",
-			"keySize": 256
-		},
-		"distributionCryptoSpec": {
-			"cipher": "AES-128-CBC",
-			"mac": "SHA256"
-		},
-		"sessionCryptoSpec": {
-			"cipher": "AES-128-CBC",
-			"mac": "SHA256"
-		}
-	},
-	"targetServerInfoList": [
-		{
-			"name": "net1.server",
-			"host": "localhost",
-			"port": 21100,
-			"group": "Servers"
-		}
-	],
-	"contextList": [
-		{"Number of People": 2, "Location": "Classroom",    "Time of Day": "10:30"},
-		{"Number of People": 1, "Location": "Meeting Room", "Time of Day": "14:00"},
-		{"Number of People": 4, "Location": "Classroom",    "Time of Day": "12:00"},
-		{"Number of People": 2, "Location": "Cafeteria",    "Time of Day": "11:00"},
-		{"Number of People": 1, "Location": "Classroom",    "Time of Day": "08:30"},
-		{"Number of People": 3, "Location": "Classroom",    "Time of Day": "09:00"},
-		{"Number of People": 2, "Location": "Meeting Room", "Time of Day": "19:00"},
-		{"Number of People": 3, "Location": "Meeting Room", "Time of Day": "17:59"},
-		{"Number of People": 5, "Location": "Office",       "Time of Day": "23:00"},
-		{"Number of People": 2, "Location": "Classroom",    "Time of Day": "18:01"}
-	]
-}
-EOF
+        src_config="$IOTAUTH_CONFIGS/client_val_${val}.config"
+        if [ ! -f "$src_config" ]; then
+            echo "  ❌ Config not found: $src_config"
+            echo "     Did generateAll.sh run successfully?"
+            exit 1
+        fi
+
+        # Copy IoTAuth-generated config then patch key paths to point to same folder (./)
+        cp "$src_config" "$dest_dir/client_val_${val}.config"
+        sed -i "s|\"privateKey\":.*|\"privateKey\": \"./Net1.Client_val_${val}Key.pem\"|" \
+            "$dest_dir/client_val_${val}.config"
+        sed -i "s|\"publicKey\":.*|\"publicKey\": \"./Auth101EntityCert.pem\"|" \
+            "$dest_dir/client_val_${val}.config"
 
         # Copy freshly generated cert and key from IoTAuth
         cp "$IOTAUTH_DIR/entity/auth_certs/Auth101EntityCert.pem" "$dest_dir/"
         cp "$IOTAUTH_DIR/entity/credentials/keys/net1/Net1.Client_val_${val}Key.pem" "$dest_dir/"
-        echo "  ✅ val${val}/  — config + cert + key written"
+        echo "  ✅ val${val}/  — config (from IoTAuth) + cert + key written"
     done
 
     echo "✅ Certificates and keys successfully written (${#VALIDITY_PERIODS[@]} periods)."
