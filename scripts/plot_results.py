@@ -751,17 +751,11 @@ def main():
                                          output_dir, test_name=test_name, auth_mode=auth_mode, bypass_mode=args.bypass_mode)
     else:
         # ── Test 1: validity vs. monitor latency ──────────────────────────────
-        compare_dir = Path(args.compare_dir).resolve() if args.compare_dir else None
-
-        # Determine which mode is "primary" and which is the comparison
-        primary_mode = auth_mode
-        if compare_dir and compare_dir.exists():
-            # Infer the compare dir's auth mode from its path
-            _, cmp_inferred_mode, _ = infer_test_context(compare_dir)
-            cmp_auth_mode = cmp_inferred_mode or ("remote" if primary_mode == "local" else "local")
-        else:
-            cmp_auth_mode = None
-            compare_dir = None
+        compare_csv = Path(args.compare_csv).resolve() if args.compare_csv else None
+        cmp_auth_mode = None
+        if compare_csv and compare_csv.exists():
+            _, cmp_inferred_mode, _ = infer_test_context(compare_csv.parent)
+            cmp_auth_mode = cmp_inferred_mode or ("remote" if auth_mode == "local" else "local")
 
         validities, runs = discover_reports(reports_dir)
         print("=" * 80)
@@ -772,8 +766,8 @@ def main():
         print(f"Validities  : {[int(v) for v in validities]} seconds")
         print(f"Runs        : {runs} per validity period")
         print(f"Test / Mode : {test_name} / {auth_mode}")
-        if compare_dir:
-            print(f"Compare dir : {compare_dir} ({cmp_auth_mode})")
+        if compare_csv:
+            print(f"Compare CSV : {compare_csv} ({cmp_auth_mode or 'unknown mode'})")
         print("=" * 80)
 
         results, worst_case_results = load_reports(reports_dir, validities, runs)
