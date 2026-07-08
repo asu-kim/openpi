@@ -484,16 +484,13 @@ def load_test2_reports(reports_dir: Path, thresholds: list, runs: int, bypass_mo
 
     for t in thresholds:
         for r in range(1, runs + 1):
-            file_candidates = [
-                reports_dir / f"thresh_{t}_run_{r}.txt",
-                reports_dir / f"thresh_{int(t) if t == int(t) else t}_run_{r}.txt",
-            ]
             lat = 0.0
             wc_lat = 0.0
             b_val = 0.0
             found_file = None
-            for cand in file_candidates:
-                if cand.exists():
+            for cand in sorted(reports_dir.glob(f"thresh_*_run_{r}.txt")):
+                m = re.match(r"thresh_([\d\.]+)_run_\d+\.txt", cand.name, re.IGNORECASE)
+                if m and abs(float(m.group(1)) - t) < 1e-6:
                     found_file = cand
                     break
 
