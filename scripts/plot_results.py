@@ -527,149 +527,273 @@ def load_test2_reports(reports_dir: Path, thresholds: list, runs: int, bypass_mo
     return results, wc_results, bypass_results
 
 
-def generate_test2_plots_and_reports(thresholds: list, results: dict, worst_case_results: dict,
-                                     bypass_results: dict, output_dir: Path, test_name: str = "test2",
-                                     auth_mode: str = "local", bypass_mode: str = "still"):
-    output_dir.mkdir(parents=True, exist_ok=True)
+TEST2_CSV_NAME = "threshold_vs_latency.csv"
 
-    summary_rows = []
-    avg_latencies = []
-    std_latencies = []
-    avg_bypass_rates = []
 
-    for t in thresholds:
-        runs = results[t]
-        avg = sum(runs) / len(runs) if runs else 0.0
-        variance = sum((x - avg) ** 2 for x in runs) / len(runs) if len(runs) > 1 else 0.0
-        std_val = variance ** 0.5
-
-        b_runs = bypass_results[t]
-        avg_b = sum(b_runs) / len(b_runs) if b_runs else 0.0
-
-        avg_latencies.append(avg)
-        std_latencies.append(std_val)
-        avg_bypass_rates.append(avg_b)
-
-        summary_rows.append({
-            "threshold": t,
-            "runs_lat": runs,
-            "avg_lat": avg,
-            "std_lat": std_val,
-            "avg_bypass": avg_b,
-        })
-
-    # Console table
-    print("\n" + "=" * 80)
-    print(f"MOTION THRESHOLD vs. BYPASS RATE ({bypass_mode.upper()}) & MONITOR LATENCY")
-    print("=" * 80)
-    num_runs = len(list(results.values())[0])
-    header = (f"{'Threshold':>10} | "
-              + " | ".join([f"Run {i+1} (ms)".rjust(10) for i in range(num_runs)])
-              + f" | {'Average (ms)':>12} | {'Std Dev':>10} | {'AvgBypass (%)':>14}")
-    print(header)
-    print("-" * len(header))
-    for row in summary_rows:
-        runs_str = " | ".join([f"{r:>10.2f}" for r in row["runs_lat"]])
-        print(f"{row['threshold']:>10.2f} | {runs_str} | {row['avg_lat']:>12.2f} | {row['std_lat']:>10.2f} | {row['avg_bypass']:>14.2f}%")
-    print("=" * 80)
-
-    # CSV
-    csv_path = output_dir / f"threshold_vs_bypass_{bypass_mode}_latency.csv"
+def write_test2_csv(thresholds: list, avg_latencies: list, wc_latencies: list,
+                    output_dir: Path) -> Path:
+    """
+    Write the aggregated Test 2 summary CSV.
+    Format: Threshold,Average_ms,WorstCase_ms (one row per threshold condition).
+    This is the single source of truth: graphs are always rendered from this file.
+    """
+    csv_path = output_dir / TEST2_CSV_NAME
     with open(csv_path, "w") as f:
-        run_headers = ",".join([f"Run_{i+1}_ms" for i in range(num_runs)])
-        f.write(f"Threshold,{run_headers},Average_ms,StdDev_ms,AvgBypassRate_pct\n")
-        for row in summary_rows:
-            runs_csv = ",".join([f"{r:.4f}" for r in row["runs_lat"]])
-            f.write(f"{row['threshold']},{runs_csv},{row['avg_lat']:.4f},{row['std_lat']:.4f},{row['avg_bypass']:.4f}\n")
+        f.write("Threshold,Average_ms,WorstCase_ms\n")
+        for t, avg, wc in zip(thresholds, avg_latencies, wc_latencies):
+            f.write(f"{t:.4f},{avg:.4f},{wc:.4f}\n")
     print(f"📊 CSV saved to: {csv_path}")
+    return csv_path
 
-    # Text report
-    txt_path = output_dir / f"threshold_vs_bypass_{bypass_mode}_report.txt"
-    with open(txt_path, "w") as f:
-        f.write(f"MOTION THRESHOLD vs. BYPASS RATE ({bypass_mode.upper()}) & LATENCY REPORT\n")
-        f.write("===============================================================\n")
-        f.write(f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}\n\n")
-        f.write(header + "\n")
-        f.write("-" * len(header) + "\n")
-        for row in summary_rows:
-            runs_str = " | ".join([f"{r:>10.2f}" for r in row["runs_lat"]])
-            f.write(f"{row['threshold']:>10.2f} | {runs_str} | {row['avg_lat']:>12.2f}"
-                    f" | {row['std_lat']:>10.2f} | {row['avg_bypass']:>14.2f}%\n")
-    print(f"📄 Text report saved to: {txt_path}")
 
-    # Graph
+def read_test2_csv(csv_path: Path) -> tuple[list, list, list]:
+    """Read a Test 2 summary CSV and return (thresholds, avg_latencies, wc_latencies)."""
+    thresholds, avg_latencies, wc_latencies = [], [], []
+    with open(csv_path) as f:
+        f.readline()  # skip header
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            parts = line.split(",")
+            if len(parts) >= 3:
+                thresholds.append(float(parts[0]))
+                avg_latencies.append(float(parts[1]))
+                wc_latencies.append(float(parts[2]))
+    return thresholds, avg_latencies, wc_latencies
+
+
+def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies: list,
+                            output_dir: Path, test_name: str, auth_mode: str):
+    """Render two separate single-mode graphs for Test 2: Average Latency & Worst-Case Latency."""
     if not MATPLOTLIB_AVAILABLE:
         print("\n⚠️  Warning: matplotlib is not available.")
         return
 
+    test_label = test_name.upper()
+    mode_label = auth_mode.capitalize() + " Auth"
+
+    # ── Graph 1: Average Monitor Latency vs. Threshold ───────────────────────
     try:
-        fig, ax1 = plt.subplots(figsize=(11, 6), dpi=300)
-
-        color_lat = '#1f77b4'   # blue  — left axis
-        color_ind = '#2ca02c'   # green — individual scatter
-        color_byp = '#ff7f0e'   # orange— right axis
-
-        ax1.errorbar(thresholds, avg_latencies, yerr=std_latencies,
-                     marker='o', markersize=8, linewidth=2.5,
-                     capsize=6, capthick=2, color=color_lat,
-                     label='Avg Monitor Latency (±1 Std Dev)', ecolor='#d62728')
+        color_lat = '#1f77b4'
+        fig, ax = plt.subplots(figsize=(11, 6), dpi=300)
+        ax.plot(thresholds, avg_latencies, marker='o', markersize=8, linewidth=2.5,
+                color=color_lat, label='Avg Monitor Latency')
         for i, t in enumerate(thresholds):
-            ax1.scatter([t] * len(results[t]), results[t],
-                        color=color_ind, alpha=0.6, s=30,
-                        label='Individual Runs' if i == 0 else "")
-            ax1.annotate(f"{avg_latencies[i]:.2f} ms", (t, avg_latencies[i]),
-                         textcoords="offset points", xytext=(0, 12),
-                         ha='center', fontweight='bold', color=color_lat)
+            ax.annotate(f"{avg_latencies[i]:.2f} ms", (t, avg_latencies[i]),
+                        textcoords="offset points", xytext=(0, 12),
+                        ha='center', fontweight='bold', color=color_lat)
 
-        ax1.set_xlabel('Motion Threshold Value (Peak-to-Peak Joint Variation)', fontsize=12, labelpad=10)
-        ax1.set_ylabel('Avg Monitor Latency (ms)', fontsize=12, color=color_lat, labelpad=10)
-        ax1.tick_params(axis='y', labelcolor=color_lat)
-        ax1.set_ylim(0, 100)
-        ax1.set_yticks(range(0, 101, 10))
-        ax1.set_xticks(thresholds)
-        ax1.set_xticklabels([f"{t}" for t in thresholds], fontsize=11)
-        ax1.grid(True, linestyle='--', alpha=0.4)
+        ax.set_xlabel('Motion Threshold Value (τ)', fontsize=12, labelpad=10)
+        ax.set_ylabel('Average Monitor Latency (ms)', fontsize=12, color=color_lat, labelpad=10)
+        ax.set_xticks(thresholds)
+        ax.set_xticklabels([f"{t:.4f}" for t in thresholds], fontsize=11)
+        ax.set_ylim(0, max(max(avg_latencies, default=0) * 1.4, 20))
+        ax.grid(True, linestyle='--', alpha=0.4)
+        ax.legend(frameon=True, facecolor='white', framealpha=0.9, fontsize=10, loc='upper right')
 
-        ax2 = ax1.twinx()
-        bypass_label_str = 'Active Rate (%) [Actions requiring Auth]' if bypass_mode.lower() == 'active' else 'Bypass Rate (%) [Still Actions Bypassed]'
-        ax2.plot(thresholds, avg_bypass_rates,
-                 marker='s', markersize=8, linewidth=2.5,
-                 linestyle='--', color=color_byp,
-                 label=bypass_label_str)
-        for i, t in enumerate(thresholds):
-            ax2.annotate(f"{avg_bypass_rates[i]:.1f}%", (t, avg_bypass_rates[i]),
-                         textcoords="offset points", xytext=(0, -18),
-                         ha='center', fontweight='bold', color=color_byp)
-
-        ax2.set_ylabel(bypass_label_str, fontsize=12, color=color_byp, labelpad=10)
-        ax2.tick_params(axis='y', labelcolor=color_byp)
-        ax2.set_ylim(0, 100)
-        ax2.set_yticks(range(0, 101, 10))
-
-        lines1, labels1 = ax1.get_legend_handles_labels()
-        lines2, labels2 = ax2.get_legend_handles_labels()
-        ax1.legend(lines1 + lines2, labels1 + labels2,
-                   frameon=True, facecolor='white', framealpha=0.9, fontsize=10,
-                   loc='upper right')
-
-        test_label = test_name.upper()
-        mode_label = auth_mode.capitalize() + " Auth"
-        plot_title = f"{test_label}: Motion Threshold vs. {bypass_mode.capitalize()} Rate & Monitor Latency — {mode_label}"
-        file_stem  = f"{test_name}_{auth_mode}_threshold_vs_{bypass_mode}_and_latency"
-
+        plot_title = f"{test_label}: Average Monitor Latency vs. Motion Threshold — {mode_label}"
         fig.suptitle(plot_title, fontsize=14, fontweight='bold', y=1.01)
         fig.tight_layout()
 
-        png_path = output_dir / f"{file_stem}.png"
-        pdf_path = output_dir / f"{file_stem}.pdf"
-        fig.savefig(png_path, bbox_inches='tight')
-        fig.savefig(pdf_path, bbox_inches='tight')
+        file_stem = f"{test_name}_{auth_mode}_threshold_vs_avg_latency"
+        fig.savefig(output_dir / f"{file_stem}.png", bbox_inches='tight')
+        fig.savefig(output_dir / f"{file_stem}.pdf", bbox_inches='tight')
         plt.close(fig)
-
-        print(f"📈 Graph (PNG) saved to: {png_path}")
-        print(f"📈 Graph (PDF) saved to: {pdf_path}")
+        print(f"📈 Graph (PNG) saved to: {output_dir / file_stem}.png")
+        print(f"📈 Graph (PDF) saved to: {output_dir / file_stem}.pdf")
     except Exception as e:
-        print(f"❌ Error generating graph: {e}")
+        print(f"❌ Error generating Test 2 avg-latency graph: {e}")
+
+    # ── Graph 2: Worst-Case Monitor Latency vs. Threshold ────────────────────
+    try:
+        color_wc = '#d62728'
+        fig, ax = plt.subplots(figsize=(11, 6), dpi=300)
+        ax.plot(thresholds, wc_latencies, marker='s', markersize=8, linewidth=2.5,
+                linestyle='--', color=color_wc, label='Worst-Case Monitor Latency')
+        for i, t in enumerate(thresholds):
+            ax.annotate(f"{wc_latencies[i]:.2f} ms", (t, wc_latencies[i]),
+                        textcoords="offset points", xytext=(0, 12),
+                        ha='center', fontweight='bold', color=color_wc)
+
+        ax.set_xlabel('Motion Threshold Value (τ)', fontsize=12, labelpad=10)
+        ax.set_ylabel('Worst-Case Monitor Latency (ms)', fontsize=12, color=color_wc, labelpad=10)
+        ax.set_xticks(thresholds)
+        ax.set_xticklabels([f"{t:.4f}" for t in thresholds], fontsize=11)
+        ax.set_ylim(0, max(max(wc_latencies, default=0) * 1.4, 20))
+        ax.grid(True, linestyle='--', alpha=0.4)
+        ax.legend(frameon=True, facecolor='white', framealpha=0.9, fontsize=10, loc='upper right')
+
+        plot_title = f"{test_label}: Worst-Case Monitor Latency vs. Motion Threshold — {mode_label}"
+        fig.suptitle(plot_title, fontsize=14, fontweight='bold', y=1.01)
+        fig.tight_layout()
+
+        file_stem = f"{test_name}_{auth_mode}_threshold_vs_worstcase_latency"
+        fig.savefig(output_dir / f"{file_stem}.png", bbox_inches='tight')
+        fig.savefig(output_dir / f"{file_stem}.pdf", bbox_inches='tight')
+        plt.close(fig)
+        print(f"📈 Graph (PNG) saved to: {output_dir / file_stem}.png")
+        print(f"📈 Graph (PDF) saved to: {output_dir / file_stem}.pdf")
+    except Exception as e:
+        print(f"❌ Error generating Test 2 worst-case graph: {e}")
+
+
+def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
+                                     output_dir: Path, test_name: str = "test2"):
+    """Generate two separate comparative plots for Test 2 from threshold_vs_latency.csv files."""
+    if not MATPLOTLIB_AVAILABLE:
+        print("\n⚠️  Warning: matplotlib is not available — comparative plots skipped.")
+        return
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    local_t, local_avg, local_wc = read_test2_csv(local_csv)
+    remote_t, remote_avg, remote_wc = read_test2_csv(remote_csv)
+
+    local_map_avg = dict(zip(local_t, local_avg))
+    local_map_wc  = dict(zip(local_t, local_wc))
+    remote_map_avg = dict(zip(remote_t, remote_avg))
+    remote_map_wc  = dict(zip(remote_t, remote_wc))
+
+    common_t = sorted(set(local_t) & set(remote_t))
+    if not common_t:
+        print("⚠️  No common thresholds between local and remote CSVs.")
+        return
+
+    l_avg = [local_map_avg[t]  for t in common_t]
+    l_wc  = [local_map_wc[t]   for t in common_t]
+    r_avg = [remote_map_avg[t] for t in common_t]
+    r_wc  = [remote_map_wc[t]  for t in common_t]
+
+    x_labels   = [f"{t:.4f}" for t in common_t]
+    test_label = test_name.upper()
+
+    # ── Plot 1: Average Latency (Local vs Remote) ────────────────────────────
+    try:
+        fig, ax = plt.subplots(figsize=(11, 6), dpi=300)
+        ax.plot(common_t, l_avg, marker='o', markersize=8, linewidth=2.5,
+                color='#1f77b4', label='Local Auth — Avg Latency')
+        ax.plot(common_t, r_avg, marker='s', markersize=8, linewidth=2.5,
+                color='#d62728', label='Remote Auth — Avg Latency', linestyle='--')
+
+        for i, t in enumerate(common_t):
+            ax.annotate(f"{l_avg[i]:.2f}", (t, l_avg[i]),
+                        textcoords="offset points", xytext=(-18, 8),
+                        ha='center', fontsize=9, fontweight='bold', color='#1f77b4')
+            ax.annotate(f"{r_avg[i]:.2f}", (t, r_avg[i]),
+                        textcoords="offset points", xytext=(18, 8),
+                        ha='center', fontsize=9, fontweight='bold', color='#d62728')
+
+        ax.set_xlabel('Motion Threshold Value (τ)', fontsize=12, labelpad=10)
+        ax.set_ylabel('Average Monitor Latency (ms)', fontsize=12, labelpad=10)
+        ax.set_xticks(common_t)
+        ax.set_xticklabels(x_labels, fontsize=11)
+        ax.set_ylim(0, max(max(l_avg + r_avg, default=0) * 1.4, 20))
+        ax.grid(True, linestyle='--', alpha=0.4)
+        ax.legend(frameon=True, facecolor='white', framealpha=0.9, fontsize=10, loc='upper right')
+
+        plot_title = f"{test_label}: Average Monitor Latency vs. Threshold — Local vs. Remote Auth"
+        fig.suptitle(plot_title, fontsize=14, fontweight='bold', y=1.01)
+        fig.tight_layout()
+
+        stem = f"{test_name}_avg_latency_local_vs_remote"
+        fig.savefig(output_dir / f"{stem}.png", bbox_inches='tight')
+        fig.savefig(output_dir / f"{stem}.pdf", bbox_inches='tight')
+        plt.close(fig)
+        print(f"📈 Comparative avg-latency graph saved to: {output_dir}/{stem}.png / .pdf")
+    except Exception as e:
+        print(f"❌ Error generating Test 2 comparative avg-latency graph: {e}")
+
+    # ── Plot 2: Worst-Case Latency (Local vs Remote) ─────────────────────────
+    try:
+        fig, ax = plt.subplots(figsize=(11, 6), dpi=300)
+        ax.plot(common_t, l_wc, marker='o', markersize=8, linewidth=2.5,
+                color='#2ca02c', label='Local Auth — Worst-Case Latency')
+        ax.plot(common_t, r_wc, marker='s', markersize=8, linewidth=2.5,
+                color='#9467bd', label='Remote Auth — Worst-Case Latency', linestyle='--')
+
+        for i, t in enumerate(common_t):
+            ax.annotate(f"{l_wc[i]:.2f}", (t, l_wc[i]),
+                        textcoords="offset points", xytext=(-18, 8),
+                        ha='center', fontsize=9, fontweight='bold', color='#2ca02c')
+            ax.annotate(f"{r_wc[i]:.2f}", (t, r_wc[i]),
+                        textcoords="offset points", xytext=(18, 8),
+                        ha='center', fontsize=9, fontweight='bold', color='#9467bd')
+
+        ax.set_xlabel('Motion Threshold Value (τ)', fontsize=12, labelpad=10)
+        ax.set_ylabel('Worst-Case Monitor Latency (ms)', fontsize=12, labelpad=10)
+        ax.set_xticks(common_t)
+        ax.set_xticklabels(x_labels, fontsize=11)
+        ax.set_ylim(0, max(max(l_wc + r_wc, default=0) * 1.4, 20))
+        ax.grid(True, linestyle='--', alpha=0.4)
+        ax.legend(frameon=True, facecolor='white', framealpha=0.9, fontsize=10, loc='upper right')
+
+        plot_title = f"{test_label}: Worst-Case Monitor Latency vs. Threshold — Local vs. Remote Auth"
+        fig.suptitle(plot_title, fontsize=14, fontweight='bold', y=1.01)
+        fig.tight_layout()
+
+        stem = f"{test_name}_worstcase_latency_local_vs_remote"
+        fig.savefig(output_dir / f"{stem}.png", bbox_inches='tight')
+        fig.savefig(output_dir / f"{stem}.pdf", bbox_inches='tight')
+        plt.close(fig)
+        print(f"📈 Comparative worst-case graph saved to: {output_dir}/{stem}.png / .pdf")
+    except Exception as e:
+        print(f"❌ Error generating Test 2 comparative worst-case graph: {e}")
+
+
+def generate_test2_plots_and_reports(thresholds: list, results: dict, worst_case_results: dict,
+                                     bypass_results: dict, output_dir: Path, test_name: str = "test2",
+                                     auth_mode: str = "local", bypass_mode: str = "still") -> Path:
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    summary_rows = []
+    avg_latencies = []
+    wc_latencies = []
+
+    for t in thresholds:
+        runs = results[t]
+        avg = sum(runs) / len(runs) if runs else 0.0
+        wc_runs = worst_case_results.get(t, [])
+        wc = max(wc_runs) if wc_runs else 0.0
+
+        avg_latencies.append(avg)
+        wc_latencies.append(wc)
+
+        summary_rows.append({
+            "threshold": t,
+            "avg_lat": avg,
+            "wc_lat": wc,
+        })
+
+    # Console table
+    print("\n" + "=" * 62)
+    print("MOTION THRESHOLD vs. MONITOR LATENCY TEST RESULTS")
+    print("=" * 62)
+    header = f"{'Threshold (τ)':>14} | {'Average (ms)':>14} | {'Worst-Case (ms)':>16}"
+    print(header)
+    print("-" * len(header))
+    for row in summary_rows:
+        print(f"{row['threshold']:>14.4f} | {row['avg_lat']:>14.2f} | {row['wc_lat']:>16.2f}")
+    print("=" * 62)
+
+    # Text report
+    txt_path = output_dir / "threshold_vs_latency_report.txt"
+    with open(txt_path, "w") as f:
+        f.write("MOTION THRESHOLD vs. MONITOR LATENCY TEST REPORT\n")
+        f.write("===============================================\n")
+        f.write(f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+        f.write(header + "\n")
+        f.write("-" * len(header) + "\n")
+        for row in summary_rows:
+            f.write(f"{row['threshold']:>14.4f} | {row['avg_lat']:>14.2f} | {row['wc_lat']:>16.2f}\n")
+    print(f"📄 Text report saved to: {txt_path}")
+
+    # Write CSV (single source of truth)
+    csv_path = write_test2_csv(thresholds, avg_latencies, wc_latencies, output_dir)
+
+    # Render single-mode graphs from CSV
+    _plot_test2_single_mode(thresholds, avg_latencies, wc_latencies, output_dir, test_name, auth_mode)
+
+    return csv_path
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -747,8 +871,22 @@ def main():
         print("=" * 80)
 
         results, wc_results, bypass_results = load_test2_reports(reports_dir, thresholds, runs, bypass_mode=args.bypass_mode)
-        generate_test2_plots_and_reports(thresholds, results, wc_results, bypass_results,
-                                         output_dir, test_name=test_name, auth_mode=auth_mode, bypass_mode=args.bypass_mode)
+        primary_csv = generate_test2_plots_and_reports(thresholds, results, wc_results, bypass_results,
+                                                       output_dir, test_name=test_name, auth_mode=auth_mode, bypass_mode=args.bypass_mode)
+
+        compare_csv = Path(args.compare_csv).resolve() if args.compare_csv else None
+        if compare_csv:
+            if not compare_csv.exists():
+                print(f"⚠️  --compare-csv path not found: {compare_csv}. Skipping Test 2 comparative plots.")
+            else:
+                if auth_mode == "local":
+                    local_csv, remote_csv = primary_csv, compare_csv
+                else:
+                    local_csv, remote_csv = compare_csv, primary_csv
+                print(f"\n📊 Generating Test 2 comparative plots from CSVs...")
+                print(f"   Local  CSV: {local_csv}")
+                print(f"   Remote CSV: {remote_csv}")
+                generate_test2_comparative_plots(local_csv, remote_csv, output_dir, test_name=test_name)
     else:
         # ── Test 1: validity vs. monitor latency ──────────────────────────────
         compare_csv = Path(args.compare_csv).resolve() if args.compare_csv else None
