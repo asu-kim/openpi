@@ -450,6 +450,40 @@ if [ "$TEST_NAME" = "test1" ]; then
         echo "ℹ️  Only $AUTH_MODE Test 1 data found. Using single-mode (combined) graph."
         python3 scripts/plot_results.py --reports-dir "$OUTPUT_DIR" --bypass-mode "$BYPASS_MODE"
     fi
+elif [ "$TEST_NAME" = "test2" ]; then
+    TEST2_BASE="$OPENPI_DIR/test_reports/test2"
+
+    if [ "$AUTH_MODE" = "local" ]; then
+        OTHER_MODE="remote"
+    else
+        OTHER_MODE="local"
+    fi
+
+    OTHER_BASE="$TEST2_BASE/$OTHER_MODE"
+    OTHER_CSV=""
+    if [ -d "$OTHER_BASE" ]; then
+        for dir in $(ls -dt "$OTHER_BASE"/*/  2>/dev/null); do
+            dir="${dir%/}"
+            if [ -f "$dir/threshold_vs_latency.csv" ]; then
+                OTHER_CSV="$dir/threshold_vs_latency.csv"
+                break
+            fi
+        done
+    fi
+
+    if [ -n "$OTHER_CSV" ]; then
+        echo "🔀 Both local and remote Test 2 data found."
+        echo "   Primary ($AUTH_MODE): $OUTPUT_DIR"
+        echo "   Compare ($OTHER_MODE): $OTHER_CSV"
+        echo "   → Generating separate comparative plots (avg latency & worst-case)..."
+        python3 scripts/plot_results.py \
+            --reports-dir "$OUTPUT_DIR" \
+            --compare-csv "$OTHER_CSV" \
+            --bypass-mode "$BYPASS_MODE"
+    else
+        echo "ℹ️  Only $AUTH_MODE Test 2 data found. Generating single-mode graphs."
+        python3 scripts/plot_results.py --reports-dir "$OUTPUT_DIR" --bypass-mode "$BYPASS_MODE"
+    fi
 else
     python3 scripts/plot_results.py --reports-dir "$OUTPUT_DIR" --bypass-mode "$BYPASS_MODE"
 fi
