@@ -26,10 +26,11 @@ import sys
 from pathlib import Path
 from typing import Any
 
-# Paligemma token constants (consistent with interpret_fast_tokens.py)
-EOS_TOKEN = 1
-FAST_TOKEN_MIN = 2048
-FAST_TOKEN_MAX = 2048 + 256
+# PaliGemma token constants (verified against interpret_fast_tokens.py)
+EOS_TOKEN = 1            # PaliGemma end-of-sequence
+PAD_TOKEN = 0            # PaliGemma padding
+FAST_OFFSET = 257023     # 257152 - 1 - 128; fast_id = FAST_OFFSET - paligemma_id
+FAST_ID_MAX = 10000      # candidate FAST action token if 0 <= fast_id < FAST_ID_MAX
 
 
 def trim_raw_tokens(tokens: list[int]) -> list[int]:
@@ -44,8 +45,18 @@ def trim_raw_tokens(tokens: list[int]) -> list[int]:
 
 
 def extract_fast_action_tokens(trimmed_tokens: list[int]) -> list[int]:
-    """Extract only tokens in the FAST action token vocab range [2048, 2304)."""
-    return [t for t in trimmed_tokens if FAST_TOKEN_MIN <= t < FAST_TOKEN_MAX]
+    """Convert raw PaliGemma tokens to FAST ids, or pass through already-converted FAST ids."""
+    fast_ids: list[int] = []
+    for t in trimmed_tokens:
+        val = int(t)
+        if val >= 100000:
+            fast_id = FAST_OFFSET - val
+            if 0 <= fast_id < FAST_ID_MAX:
+                fast_ids.append(fast_id)
+        else:
+            if 0 <= val < FAST_ID_MAX:
+                fast_ids.append(val)
+    return fast_ids
 
 
 def compute_normalized_entropy(fast_tokens: list[int]) -> float:
@@ -75,15 +86,17 @@ def extract_score_from_record(record: dict[str, Any]) -> float | None:
                 return float(tm[key])
 
     # 3. Compute from fast_action_tokens if logged
-    if "fast_action_tokens" in record and isinstance(record["fast_action_tokens"], list):
+    if "fast_action_tokens" in record and isinstance(record["fast_action_tokens"], list) and len(record["fast_action_tokens"]) > 0:
         return compute_normalized_entropy([int(x) for x in record["fast_action_tokens"]])
 
-    # 4. Compute from raw_paligemma_token_ids
-    raw = record.get("raw_paligemma_token_ids")
-    if isinstance(raw, list) and len(raw) > 0:
-        trimmed = trim_raw_tokens([int(x) for x in raw])
-        fast = extract_fast_action_tokens(trimmed)
-        return compute_normalized_entropy(fast)
+    # 4. Compute from raw_paligemma_token_ids or tokens
+    for raw_key in ("raw_paligemma_token_ids", "tokens", "token_ids"):
+        raw = record.get(raw_key)
+        if isinstance(raw, list) and len(raw) > 0:
+            trimmed = trim_raw_tokens([int(x) for x in raw])
+            fast = extract_fast_action_tokens(trimmed)
+            if len(fast) > 0:
+                return compute_normalized_entropy(fast)
 
     return None
 
