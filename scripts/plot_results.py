@@ -48,6 +48,7 @@ if "MPLCONFIGDIR" not in os.environ:
 # Try importing matplotlib; if unavailable, attempt re-launch with a known venv.
 try:
     import matplotlib.pyplot as plt
+    import matplotlib.patheffects as path_effects
     MATPLOTLIB_AVAILABLE = True
     plt.rcParams.update({
         'font.size': 12,
@@ -57,8 +58,14 @@ try:
         'ytick.labelsize': 13,
         'legend.fontsize': 12,
     })
+    try:
+        from adjustText import adjust_text
+        ADJUST_TEXT_AVAILABLE = True
+    except ImportError:
+        ADJUST_TEXT_AVAILABLE = False
 except ImportError:
     MATPLOTLIB_AVAILABLE = False
+    ADJUST_TEXT_AVAILABLE = False
     known_venvs = [
         Path(__file__).parent.parent.parent / "iotauth/entity/yolo_entity/.venv/bin/python",
         Path(__file__).parent.parent.parent / "iotauth/entity/python/.venv/bin/python",
@@ -93,6 +100,26 @@ def infer_test_context(reports_dir: Path) -> tuple[str, str, str]:
                 bypass_mode = parts[i + 3]
             return test_name, auth_mode, bypass_mode
     return None, None, None
+
+
+def annotate_point(ax, text, xy, xytext=(0, 12), color='black', fontsize=11, ha='center'):
+    ann = ax.annotate(
+        text, xy=xy,
+        textcoords="offset points", xytext=xytext,
+        ha=ha, fontweight='bold', color=color, fontsize=fontsize
+    )
+    if MATPLOTLIB_AVAILABLE:
+        ann.set_path_effects([path_effects.withStroke(linewidth=3, foreground='white')])
+    return ann
+
+
+def optimize_annotations(texts, ax=None):
+    if not texts or not ADJUST_TEXT_AVAILABLE:
+        return
+    try:
+        adjust_text(texts, ax=ax)
+    except Exception:
+        pass
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -231,10 +258,11 @@ def _plot_single_mode(validities: list, avg_latencies: list, wc_latencies: list,
         ax1.plot(validities, avg_latencies,
                  marker='o', markersize=8, linewidth=2.5, color=color_avg,
                  label='Avg Monitor Latency')
+        texts1 = []
         for i, val in enumerate(validities):
-            ax1.annotate(f"{avg_latencies[i]:.2f} ms", (val, avg_latencies[i]),
-                         textcoords="offset points", xytext=(0, 12),
-                         ha='center', fontweight='bold', color=color_avg, fontsize=11)
+            texts1.append(annotate_point(ax1, f"{avg_latencies[i]:.2f} ms", (val, avg_latencies[i]),
+                                         xytext=(0, 12), color=color_avg, fontsize=11))
+        optimize_annotations(texts1, ax=ax1)
 
         ax1.set_xlabel('Relative Validity Period (seconds)', fontsize=14, labelpad=10)
         ax1.set_ylabel('Avg Monitor Latency (ms)', fontsize=14, color=color_avg, labelpad=10)
@@ -249,10 +277,11 @@ def _plot_single_mode(validities: list, avg_latencies: list, wc_latencies: list,
                  marker='s', markersize=8, linewidth=2.5,
                  linestyle='--', color=color_wc,
                  label='Worst-Case Monitor Latency')
+        texts2 = []
         for i, val in enumerate(validities):
-            ax2.annotate(f"{wc_latencies[i]:.2f} ms", (val, wc_latencies[i]),
-                         textcoords="offset points", xytext=(0, -18),
-                         ha='center', fontweight='bold', color=color_wc, fontsize=11)
+            texts2.append(annotate_point(ax2, f"{wc_latencies[i]:.2f} ms", (val, wc_latencies[i]),
+                                         xytext=(0, -18), color=color_wc, fontsize=11))
+        optimize_annotations(texts2, ax=ax2)
 
         ax2.set_ylabel('Worst-Case Monitor Latency (ms)', fontsize=14,
                        color=color_wc, labelpad=10)
@@ -401,13 +430,13 @@ def generate_comparative_plots(local_csv: Path, remote_csv: Path,
         ax.plot(common_v, r_avg, marker='s', markersize=8, linewidth=2.5,
                 color=color_remote, label='Remote Auth — Avg Latency', linestyle='--')
 
+        texts = []
         for i, val in enumerate(common_v):
-            ax.annotate(f"{l_avg[i]:.2f}", (val, l_avg[i]),
-                        textcoords="offset points", xytext=(-18, 8),
-                        ha='center', fontsize=11, fontweight='bold', color=color_local)
-            ax.annotate(f"{r_avg[i]:.2f}", (val, r_avg[i]),
-                        textcoords="offset points", xytext=(18, 8),
-                        ha='center', fontsize=11, fontweight='bold', color=color_remote)
+            texts.append(annotate_point(ax, f"{l_avg[i]:.2f}", (val, l_avg[i]),
+                                        xytext=(-18, 8), color=color_local, fontsize=11))
+            texts.append(annotate_point(ax, f"{r_avg[i]:.2f}", (val, r_avg[i]),
+                                        xytext=(18, 8), color=color_remote, fontsize=11))
+        optimize_annotations(texts, ax=ax)
 
         ax.set_xlabel('Relative Validity Period (seconds)', fontsize=14, labelpad=10)
         ax.set_ylabel('Average Monitor Latency (ms)', fontsize=14, labelpad=10)
@@ -444,13 +473,13 @@ def generate_comparative_plots(local_csv: Path, remote_csv: Path,
         ax.plot(common_v, r_wc, marker='s', markersize=8, linewidth=2.5,
                 color=color_remote, label='Remote Auth — Worst-Case Latency', linestyle='--')
 
+        texts = []
         for i, val in enumerate(common_v):
-            ax.annotate(f"{l_wc[i]:.2f}", (val, l_wc[i]),
-                        textcoords="offset points", xytext=(-18, 8),
-                        ha='center', fontsize=11, fontweight='bold', color=color_local)
-            ax.annotate(f"{r_wc[i]:.2f}", (val, r_wc[i]),
-                        textcoords="offset points", xytext=(18, 8),
-                        ha='center', fontsize=11, fontweight='bold', color=color_remote)
+            texts.append(annotate_point(ax, f"{l_wc[i]:.2f}", (val, l_wc[i]),
+                                        xytext=(-18, 8), color=color_local, fontsize=11))
+            texts.append(annotate_point(ax, f"{r_wc[i]:.2f}", (val, r_wc[i]),
+                                        xytext=(18, 8), color=color_remote, fontsize=11))
+        optimize_annotations(texts, ax=ax)
 
         ax.set_xlabel('Relative Validity Period (seconds)', fontsize=14, labelpad=10)
         ax.set_ylabel('Worst-Case Monitor Latency (ms)', fontsize=14, labelpad=10)
@@ -596,24 +625,24 @@ def _add_rate_twinx(ax, x_coords, active_rates, still_rates, show_active: bool, 
     ax2 = ax.twinx()
     lines = []
     labels = []
+    texts = []
     if show_active and active_rates:
         l1, = ax2.plot(x_coords, active_rates, marker='^', markersize=7, linewidth=2,
                        linestyle=':', color='#ff7f0e', label='% Active Rate')
         lines.append(l1)
         labels.append('% Active Rate')
         for i, x in enumerate(x_coords):
-            ax2.annotate(f"{active_rates[i]:.1f}%", (x, active_rates[i]),
-                         textcoords="offset points", xytext=(0, -14),
-                         ha='center', fontsize=10.5, color='#ff7f0e', fontweight='bold')
+            texts.append(annotate_point(ax2, f"{active_rates[i]:.1f}%", (x, active_rates[i]),
+                                        xytext=(0, -14), color='#ff7f0e', fontsize=10.5))
     if show_still and still_rates:
         l2, = ax2.plot(x_coords, still_rates, marker='v', markersize=7, linewidth=2,
                        linestyle=':', color='#2ca02c', label='% Still Rate (Bypass)')
         lines.append(l2)
         labels.append('% Still Rate (Bypass)')
         for i, x in enumerate(x_coords):
-            ax2.annotate(f"{still_rates[i]:.1f}%", (x, still_rates[i]),
-                         textcoords="offset points", xytext=(0, 14),
-                         ha='center', fontsize=10.5, color='#2ca02c', fontweight='bold')
+            texts.append(annotate_point(ax2, f"{still_rates[i]:.1f}%", (x, still_rates[i]),
+                                        xytext=(0, 14), color='#2ca02c', fontsize=10.5))
+    optimize_annotations(texts, ax=ax2)
 
     ax2.set_ylabel('Percentage Rate (%)', fontsize=14, color='#555555', labelpad=10)
     ax2.set_ylim(-5, 115)
@@ -651,10 +680,11 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
             ax.set_box_aspect(1)
         ax.plot(x_coords, avg_latencies, marker='o', markersize=8, linewidth=2.5,
                 color=color_lat, label='Avg Monitor Latency')
+        texts = []
         for i, x in enumerate(x_coords):
-            ax.annotate(f"{avg_latencies[i]:.2f} ms", (x, avg_latencies[i]),
-                         textcoords="offset points", xytext=(0, 12),
-                         ha='center', fontweight='bold', color=color_lat)
+            texts.append(annotate_point(ax, f"{avg_latencies[i]:.2f} ms", (x, avg_latencies[i]),
+                                        xytext=(0, 12), color=color_lat, fontsize=11))
+        optimize_annotations(texts, ax=ax)
 
         ax.set_xlabel('Motion Threshold Value (τ)', fontsize=14, labelpad=10)
         ax.set_ylabel('Average Monitor Latency (ms)', fontsize=14, color=color_lat, labelpad=10)
@@ -690,10 +720,11 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
             ax.set_box_aspect(1)
         ax.plot(x_coords, wc_latencies, marker='s', markersize=8, linewidth=2.5,
                 linestyle='--', color=color_wc, label='Worst-Case Monitor Latency')
+        texts = []
         for i, x in enumerate(x_coords):
-            ax.annotate(f"{wc_latencies[i]:.2f} ms", (x, wc_latencies[i]),
-                         textcoords="offset points", xytext=(0, 12),
-                         ha='center', fontweight='bold', color=color_wc)
+            texts.append(annotate_point(ax, f"{wc_latencies[i]:.2f} ms", (x, wc_latencies[i]),
+                                        xytext=(0, 12), color=color_wc, fontsize=11))
+        optimize_annotations(texts, ax=ax)
 
         ax.set_xlabel('Motion Threshold Value (τ)', fontsize=14, labelpad=10)
         ax.set_ylabel('Worst-Case Monitor Latency (ms)', fontsize=14, color=color_wc, labelpad=10)
@@ -774,13 +805,13 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
         ax.plot(x_coords, r_avg, marker='s', markersize=8, linewidth=2.5,
                 color='#d62728', label='Remote Auth — Avg Latency', linestyle='--')
 
+        texts = []
         for i, x in enumerate(x_coords):
-            ax.annotate(f"{l_avg[i]:.2f}", (x, l_avg[i]),
-                        textcoords="offset points", xytext=(-18, 8),
-                        ha='center', fontsize=11, fontweight='bold', color='#1f77b4')
-            ax.annotate(f"{r_avg[i]:.2f}", (x, r_avg[i]),
-                        textcoords="offset points", xytext=(18, 8),
-                        ha='center', fontsize=11, fontweight='bold', color='#d62728')
+            texts.append(annotate_point(ax, f"{l_avg[i]:.2f}", (x, l_avg[i]),
+                                        xytext=(-18, 8), color='#1f77b4', fontsize=11))
+            texts.append(annotate_point(ax, f"{r_avg[i]:.2f}", (x, r_avg[i]),
+                                        xytext=(18, 8), color='#d62728', fontsize=11))
+        optimize_annotations(texts, ax=ax)
 
         ax.set_xlabel('Motion Threshold Value (τ)', fontsize=14, labelpad=10)
         ax.set_ylabel('Average Monitor Latency (ms)', fontsize=14, labelpad=10)
@@ -817,13 +848,13 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
         ax.plot(x_coords, r_wc, marker='s', markersize=8, linewidth=2.5,
                 color='#9467bd', label='Remote Auth — Worst-Case Latency', linestyle='--')
 
+        texts = []
         for i, x in enumerate(x_coords):
-            ax.annotate(f"{l_wc[i]:.2f}", (x, l_wc[i]),
-                        textcoords="offset points", xytext=(-18, 8),
-                        ha='center', fontsize=11, fontweight='bold', color='#2ca02c')
-            ax.annotate(f"{r_wc[i]:.2f}", (x, r_wc[i]),
-                        textcoords="offset points", xytext=(18, 8),
-                        ha='center', fontsize=11, fontweight='bold', color='#9467bd')
+            texts.append(annotate_point(ax, f"{l_wc[i]:.2f}", (x, l_wc[i]),
+                                        xytext=(-18, 8), color='#2ca02c', fontsize=11))
+            texts.append(annotate_point(ax, f"{r_wc[i]:.2f}", (x, r_wc[i]),
+                                        xytext=(18, 8), color='#9467bd', fontsize=11))
+        optimize_annotations(texts, ax=ax)
 
         ax.set_xlabel('Motion Threshold Value (τ)', fontsize=14, labelpad=10)
         ax.set_ylabel('Worst-Case Monitor Latency (ms)', fontsize=14, labelpad=10)
