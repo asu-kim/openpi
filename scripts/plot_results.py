@@ -208,13 +208,17 @@ def read_test1_csv(csv_path: Path) -> tuple[list, list, list]:
 
 
 def _plot_single_mode(validities: list, avg_latencies: list, wc_latencies: list,
-                      output_dir: Path, test_name: str, auth_mode: str):
+                      output_dir: Path, test_name: str, auth_mode: str,
+                      aspect_1_1: bool = False):
     """Render the single-mode graph (avg latency + worst-case on twin axes) from CSV data."""
     try:
         color_avg = '#1f77b4'
         color_wc  = '#d62728'
 
-        fig, ax1 = plt.subplots(figsize=(11, 6), dpi=300)
+        figsize = (8, 8) if aspect_1_1 else (11, 6)
+        fig, ax1 = plt.subplots(figsize=figsize, dpi=300)
+        if aspect_1_1:
+            ax1.set_box_aspect(1)
 
         ax1.plot(validities, avg_latencies,
                  marker='o', markersize=8, linewidth=2.5, color=color_avg,
@@ -272,7 +276,8 @@ def _plot_single_mode(validities: list, avg_latencies: list, wc_latencies: list,
 
 def generate_plots_and_reports(validities: list, results: dict, worst_case_results: dict,
                                 output_dir: Path, test_name: str = "test1",
-                                auth_mode: str = "local") -> Path:
+                                auth_mode: str = "local",
+                                aspect_1_1: bool = False) -> Path:
     """
     Test 1 pipeline:
       1. Compute per-validity averages from raw run dicts.
@@ -325,13 +330,14 @@ def generate_plots_and_reports(validities: list, results: dict, worst_case_resul
 
     # Step 3 — render graph by reading back from CSV
     v, avg_lats, wc_lats = read_test1_csv(csv_path)
-    _plot_single_mode(v, avg_lats, wc_lats, output_dir, test_name, auth_mode)
+    _plot_single_mode(v, avg_lats, wc_lats, output_dir, test_name, auth_mode, aspect_1_1=aspect_1_1)
 
     return csv_path
 
 
 def generate_comparative_plots(local_csv: Path, remote_csv: Path,
-                               output_dir: Path, test_name: str = "test1"):
+                               output_dir: Path, test_name: str = "test1",
+                               aspect_1_1: bool = False):
     """
     Generate two separate comparison plots for Test 1 by reading directly from
     two pre-existing validity_vs_latency.csv files (local and remote):
@@ -368,10 +374,13 @@ def generate_comparative_plots(local_csv: Path, remote_csv: Path,
 
     x_labels   = [f"{int(v)}s" for v in common_v]
     test_label = test_name.upper()
+    figsize = (8, 8) if aspect_1_1 else (11, 6)
 
     # ── Plot 1: Average Latency (Local vs Remote) ────────────────────────────
     try:
-        fig, ax = plt.subplots(figsize=(11, 6), dpi=300)
+        fig, ax = plt.subplots(figsize=figsize, dpi=300)
+        if aspect_1_1:
+            ax.set_box_aspect(1)
 
         color_local  = '#1f77b4'   # blue
         color_remote = '#d62728'   # red
@@ -411,7 +420,9 @@ def generate_comparative_plots(local_csv: Path, remote_csv: Path,
 
     # ── Plot 2: Worst-Case Latency (Local vs Remote) ─────────────────────────
     try:
-        fig, ax = plt.subplots(figsize=(11, 6), dpi=300)
+        fig, ax = plt.subplots(figsize=figsize, dpi=300)
+        if aspect_1_1:
+            ax.set_box_aspect(1)
 
         color_local  = '#2ca02c'   # green
         color_remote = '#9467bd'   # purple
@@ -601,7 +612,8 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
                             active_rates: list, still_rates: list,
                             output_dir: Path, test_name: str, auth_mode: str,
                             show_active: bool = False, show_still: bool = False,
-                            equidistant_x: bool = False):
+                            equidistant_x: bool = False,
+                            aspect_1_1: bool = False):
     """Render two separate single-mode graphs for Test 2: Average Latency & Worst-Case Latency."""
     if not MATPLOTLIB_AVAILABLE:
         print("\n⚠️  Warning: matplotlib is not available.")
@@ -609,6 +621,7 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
 
     test_label = test_name.upper()
     mode_label = auth_mode.capitalize() + " Auth"
+    figsize = (8, 8) if aspect_1_1 else (11, 6)
 
     if equidistant_x:
         x_coords = list(range(len(thresholds)))
@@ -619,7 +632,9 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
     # ── Graph 1: Average Monitor Latency vs. Threshold ───────────────────────
     try:
         color_lat = '#1f77b4'
-        fig, ax = plt.subplots(figsize=(11, 6), dpi=300)
+        fig, ax = plt.subplots(figsize=figsize, dpi=300)
+        if aspect_1_1:
+            ax.set_box_aspect(1)
         ax.plot(x_coords, avg_latencies, marker='o', markersize=8, linewidth=2.5,
                 color=color_lat, label='Avg Monitor Latency')
         for i, x in enumerate(x_coords):
@@ -655,7 +670,9 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
     # ── Graph 2: Worst-Case Monitor Latency vs. Threshold ────────────────────
     try:
         color_wc = '#d62728'
-        fig, ax = plt.subplots(figsize=(11, 6), dpi=300)
+        fig, ax = plt.subplots(figsize=figsize, dpi=300)
+        if aspect_1_1:
+            ax.set_box_aspect(1)
         ax.plot(x_coords, wc_latencies, marker='s', markersize=8, linewidth=2.5,
                 linestyle='--', color=color_wc, label='Worst-Case Monitor Latency')
         for i, x in enumerate(x_coords):
@@ -692,7 +709,8 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
 def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
                                      output_dir: Path, test_name: str = "test2",
                                      show_active: bool = False, show_still: bool = False,
-                                     equidistant_x: bool = False):
+                                     equidistant_x: bool = False,
+                                     aspect_1_1: bool = False):
     """Generate two separate comparative plots for Test 2 from threshold_vs_latency.csv files."""
     if not MATPLOTLIB_AVAILABLE:
         print("\n⚠️  Warning: matplotlib is not available — comparative plots skipped.")
@@ -727,10 +745,13 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
         x_coords = common_t
     x_labels   = [f"{t:.4f}" for t in common_t]
     test_label = test_name.upper()
+    figsize    = (8, 8) if aspect_1_1 else (11, 6)
 
     # ── Plot 1: Average Latency (Local vs Remote) ────────────────────────────
     try:
-        fig, ax = plt.subplots(figsize=(11, 6), dpi=300)
+        fig, ax = plt.subplots(figsize=figsize, dpi=300)
+        if aspect_1_1:
+            ax.set_box_aspect(1)
         ax.plot(x_coords, l_avg, marker='o', markersize=8, linewidth=2.5,
                 color='#1f77b4', label='Local Auth — Avg Latency')
         ax.plot(x_coords, r_avg, marker='s', markersize=8, linewidth=2.5,
@@ -770,7 +791,9 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
 
     # ── Plot 2: Worst-Case Latency (Local vs Remote) ─────────────────────────
     try:
-        fig, ax = plt.subplots(figsize=(11, 6), dpi=300)
+        fig, ax = plt.subplots(figsize=figsize, dpi=300)
+        if aspect_1_1:
+            ax.set_box_aspect(1)
         ax.plot(x_coords, l_wc, marker='o', markersize=8, linewidth=2.5,
                 color='#2ca02c', label='Local Auth — Worst-Case Latency')
         ax.plot(x_coords, r_wc, marker='s', markersize=8, linewidth=2.5,
@@ -814,7 +837,8 @@ def generate_test2_plots_and_reports(thresholds: list, results: dict, worst_case
                                      output_dir: Path, test_name: str = "test2",
                                      auth_mode: str = "local",
                                      show_active: bool = False, show_still: bool = False,
-                                     equidistant_x: bool = False) -> Path:
+                                     equidistant_x: bool = False,
+                                     aspect_1_1: bool = False) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     summary_rows = []
@@ -875,7 +899,7 @@ def generate_test2_plots_and_reports(thresholds: list, results: dict, worst_case
     # Render single-mode graphs from CSV
     _plot_test2_single_mode(thresholds, avg_latencies, wc_latencies, active_rates, still_rates,
                             output_dir, test_name, auth_mode, show_active=show_active, show_still=show_still,
-                            equidistant_x=equidistant_x)
+                            equidistant_x=equidistant_x, aspect_1_1=aspect_1_1)
 
     return csv_path
 
@@ -930,6 +954,10 @@ def main():
         "--equidistant-x", "--equidistant", action="store_true", dest="equidistant_x",
         help="Plot Test 2 x-axis points at equidistant categorical intervals rather than continuous numerical positions on the number line."
     )
+    parser.add_argument(
+        "--aspect-1-1", "--square", "--aspect-ratio-1-1", action="store_true", dest="aspect_1_1",
+        help="Render graphs with a 1:1 aspect ratio (square figure and axes box)."
+    )
     args = parser.parse_args()
 
     reports_dir = Path(args.reports_dir).resolve()
@@ -971,7 +999,7 @@ def main():
             thresholds, results, wc_results, active_results, still_results,
             output_dir, test_name=test_name, auth_mode=auth_mode,
             show_active=args.show_active_rate, show_still=args.show_still_rate,
-            equidistant_x=args.equidistant_x
+            equidistant_x=args.equidistant_x, aspect_1_1=args.aspect_1_1
         )
 
         compare_csv = Path(args.compare_csv).resolve() if args.compare_csv else None
@@ -989,7 +1017,7 @@ def main():
                 generate_test2_comparative_plots(
                     local_csv, remote_csv, output_dir, test_name=test_name,
                     show_active=args.show_active_rate, show_still=args.show_still_rate,
-                    equidistant_x=args.equidistant_x
+                    equidistant_x=args.equidistant_x, aspect_1_1=args.aspect_1_1
                 )
     else:
         # ── Test 1: validity vs. monitor latency ──────────────────────────────
@@ -1018,6 +1046,7 @@ def main():
         primary_csv = generate_plots_and_reports(
             validities, results, worst_case_results,
             output_dir, test_name=test_name, auth_mode=auth_mode,
+            aspect_1_1=args.aspect_1_1
         )
 
         # Step 3: if a compare CSV is provided, also generate comparative plots
@@ -1042,6 +1071,7 @@ def main():
                 print(f"   Remote CSV: {remote_csv}")
                 generate_comparative_plots(
                     local_csv, remote_csv, output_dir, test_name=test_name,
+                    aspect_1_1=args.aspect_1_1
                 )
     print("\n✅ Done!\n")
 

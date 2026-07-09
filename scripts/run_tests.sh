@@ -84,7 +84,7 @@ while [[ "$#" -gt 0 ]]; do
                 exit 1
             fi
             ;;
-        --equidistant-x|--equidistant|--show-active-rate|--show-still-rate)
+        --equidistant-x|--equidistant|--show-active-rate|--show-still-rate|--aspect-1-1|--square|--aspect-ratio-1-1)
             PLOT_ARGS+=("$1")
             shift
             ;;
@@ -466,10 +466,11 @@ if [ "$TEST_NAME" = "test1" ]; then
         python3 scripts/plot_results.py \
             --reports-dir "$OUTPUT_DIR" \
             --compare-csv "$OTHER_CSV" \
-            --bypass-mode "$BYPASS_MODE"
+            --bypass-mode "$BYPASS_MODE" \
+            "${PLOT_ARGS[@]}"
     else
         echo "ℹ️  Only $AUTH_MODE Test 1 data found. Using single-mode (combined) graph."
-        python3 scripts/plot_results.py --reports-dir "$OUTPUT_DIR" --bypass-mode "$BYPASS_MODE"
+        python3 scripts/plot_results.py --reports-dir "$OUTPUT_DIR" --bypass-mode "$BYPASS_MODE" "${PLOT_ARGS[@]}"
     fi
 elif [ "$TEST_NAME" = "test2" ]; then
     TEST2_BASE="$OPENPI_DIR/test_reports/test2"
@@ -507,7 +508,7 @@ elif [ "$TEST_NAME" = "test2" ]; then
         python3 scripts/plot_results.py --reports-dir "$OUTPUT_DIR" --bypass-mode "$BYPASS_MODE" "${PLOT_ARGS[@]}"
     fi
 else
-    python3 scripts/plot_results.py --reports-dir "$OUTPUT_DIR" --bypass-mode "$BYPASS_MODE"
+    python3 scripts/plot_results.py --reports-dir "$OUTPUT_DIR" --bypass-mode "$BYPASS_MODE" "${PLOT_ARGS[@]}"
 fi
 
 echo ""
