@@ -161,7 +161,7 @@ def main() -> int:
     for raw_path in args.input_paths:
         p = Path(raw_path)
         if p.is_dir():
-            files.extend(sorted(p.glob("*.jsonl")))
+            files.extend(sorted(p.rglob("*.jsonl")))
         elif p.is_file():
             files.append(p)
         else:
@@ -207,22 +207,38 @@ def main() -> int:
     eps = 1e-6
     zero_scores = [s for s in scores if s <= eps]
     pos_scores = [s for s in scores if s > eps]
+    max_val = max(scores) if scores else 0.0
 
     print(f"📊 Extracted {total_records} record scores across {len(files)} run file(s).")
-    print(f"   ├─ Stationary / Zero-Motion Records (s <= {eps}): {len(zero_scores)} ({len(zero_scores)/total_records*100:.1f}%)")
-    print(f"   └─ Strictly Positive Records (s > {eps}):         {len(pos_scores)} ({len(pos_scores)/total_records*100:.1f}%)")
+    print(f"   ├─ Stationary / Zero-Motion States (m(A) == 0): {len(zero_scores):5d} ({len(zero_scores)/total_records*100:5.1f}%)")
+    print(f"   └─ Strictly Positive Records (m(A) > 0):        {len(pos_scores):5d} ({len(pos_scores)/total_records*100:5.1f}%) [Max Observed: {max_val:.4f}]")
 
-    # Derive 5 threshold values
+    if not pos_scores:
+        print(
+            "❌ Error: Only zero-motion records (max_ptp == 0.0) were found in the provided log files. "
+            "At least one non-zero moving record (max_ptp > 0.0) is required to compute meaningful quantiles "
+            "(note: negative peak-to-peak variation is mathematically impossible).",
+            file=sys.stderr,
+        )
+        return 1
+
+    # Apply 95th Percentile Trimming (Q95) to filter non-stationary kinematic transients
+    q95 = calculate_percentile(pos_scores, 95.0)
+    trimmed_pos = [s for s in pos_scores if s <= q95]
+    if not trimmed_pos:
+        trimmed_pos = pos_scores
+
+    # Derive 5 purely data-driven threshold values across the trimmed steady-state motion envelope
     # 1. Stationary Bypass (exact 0.0000)
     t1 = 0.0000
-    # 2. Q25 of positive scores
-    t2 = calculate_percentile(pos_scores, 25.0) if pos_scores else 0.01
-    # 3. Q50 of positive scores
-    t3 = calculate_percentile(pos_scores, 50.0) if pos_scores else 0.02
-    # 4. Q75 of positive scores
-    t4 = calculate_percentile(pos_scores, 75.0) if pos_scores else 0.05
-    # 5. 100% Bypass Ceiling
-    t5 = max(scores) + 0.01
+    # 2. Q25 of steady-state positive motion
+    t2 = calculate_percentile(trimmed_pos, 25.0)
+    # 3. Q50 (Median) of steady-state positive motion
+    t3 = calculate_percentile(trimmed_pos, 50.0)
+    # 4. Q75 of steady-state positive motion
+    t4 = calculate_percentile(trimmed_pos, 75.0)
+    # 5. Q95 Upper Kinematic Ceiling
+    t5 = q95
 
     # Round thresholds cleanly
     fmt = f"{{:.{args.decimals}f}}"
@@ -236,10 +252,10 @@ def main() -> int:
 
     labels = [
         "Stationary Bypass (0 Motion)",
-        "25th Percentile (max_ptp)",
-        "50th Percentile / Median (max_ptp)",
-        "75th Percentile (max_ptp)",
-        "100% Bypass Ceiling (Max + 0.01)",
+        "25th Percentile (Q25 Trimmed)",
+        "50th Percentile / Median (Q50 Trimmed)",
+        "75th Percentile (Q75 Trimmed)",
+        "95th Percentile Kinematic Ceiling (Q95)",
     ]
 
     print("\n" + "=" * 80)
