@@ -58,11 +58,7 @@ try:
         'ytick.labelsize': 13,
         'legend.fontsize': 12,
     })
-    try:
-        from adjustText import adjust_text
-        ADJUST_TEXT_AVAILABLE = True
-    except ImportError:
-        ADJUST_TEXT_AVAILABLE = False
+    ADJUST_TEXT_AVAILABLE = False
 except ImportError:
     MATPLOTLIB_AVAILABLE = False
     ADJUST_TEXT_AVAILABLE = False
@@ -114,12 +110,7 @@ def annotate_point(ax, text, xy, xytext=(0, 12), color='black', fontsize=11, ha=
 
 
 def optimize_annotations(texts, ax=None):
-    if not texts or not ADJUST_TEXT_AVAILABLE:
-        return
-    try:
-        adjust_text(texts, ax=ax)
-    except Exception:
-        pass
+    pass
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -244,6 +235,7 @@ def read_test1_csv(csv_path: Path) -> tuple[list, list, list]:
 
 def _plot_single_mode(validities: list, avg_latencies: list, wc_latencies: list,
                       output_dir: Path, test_name: str, auth_mode: str,
+                      equidistant_x: bool = False,
                       aspect_1_1: bool = False, no_title: bool = False):
     """Render the single-mode graph (avg latency + worst-case on twin axes) from CSV data."""
     try:
@@ -255,11 +247,17 @@ def _plot_single_mode(validities: list, avg_latencies: list, wc_latencies: list,
         if aspect_1_1:
             ax1.set_box_aspect(1)
 
-        ax1.plot(validities, avg_latencies,
+        if equidistant_x:
+            x_coords = list(range(len(validities)))
+        else:
+            x_coords = validities
+        x_labels = [f"{int(v)}s" for v in validities]
+
+        ax1.plot(x_coords, avg_latencies,
                  marker='o', markersize=8, linewidth=2.5, color=color_avg,
                  label='Avg Monitor Latency')
         texts1 = []
-        for i, val in enumerate(validities):
+        for i, val in enumerate(x_coords):
             texts1.append(annotate_point(ax1, f"{avg_latencies[i]:.2f} ms", (val, avg_latencies[i]),
                                          xytext=(0, 12), color=color_avg, fontsize=11))
         optimize_annotations(texts1, ax=ax1)
@@ -268,17 +266,19 @@ def _plot_single_mode(validities: list, avg_latencies: list, wc_latencies: list,
         ax1.set_ylabel('Avg Monitor Latency (ms)', fontsize=14, color=color_avg, labelpad=10)
         ax1.tick_params(axis='y', labelcolor=color_avg)
         ax1.set_ylim(0, max(max(avg_latencies, default=0) * 1.4, 20))
-        ax1.set_xticks(validities)
-        ax1.set_xticklabels([f"{int(v)}s" for v in validities], fontsize=13)
+        ax1.set_xticks(x_coords)
+        ax1.set_xticklabels(x_labels, fontsize=13)
+        if equidistant_x:
+            ax1.set_xlim(-0.4, len(x_coords) - 0.6)
         ax1.grid(True, linestyle='--', alpha=0.4)
 
         ax2 = ax1.twinx()
-        ax2.plot(validities, wc_latencies,
+        ax2.plot(x_coords, wc_latencies,
                  marker='s', markersize=8, linewidth=2.5,
                  linestyle='--', color=color_wc,
                  label='Worst-Case Monitor Latency')
         texts2 = []
-        for i, val in enumerate(validities):
+        for i, val in enumerate(x_coords):
             texts2.append(annotate_point(ax2, f"{wc_latencies[i]:.2f} ms", (val, wc_latencies[i]),
                                          xytext=(0, -18), color=color_wc, fontsize=11))
         optimize_annotations(texts2, ax=ax2)
@@ -315,6 +315,7 @@ def _plot_single_mode(validities: list, avg_latencies: list, wc_latencies: list,
 def generate_plots_and_reports(validities: list, results: dict, worst_case_results: dict,
                                 output_dir: Path, test_name: str = "test1",
                                 auth_mode: str = "local",
+                                equidistant_x: bool = False,
                                 aspect_1_1: bool = False,
                                 no_title: bool = False) -> Path:
     """
@@ -369,13 +370,14 @@ def generate_plots_and_reports(validities: list, results: dict, worst_case_resul
 
     # Step 3 — render graph by reading back from CSV
     v, avg_lats, wc_lats = read_test1_csv(csv_path)
-    _plot_single_mode(v, avg_lats, wc_lats, output_dir, test_name, auth_mode, aspect_1_1=aspect_1_1, no_title=no_title)
+    _plot_single_mode(v, avg_lats, wc_lats, output_dir, test_name, auth_mode, equidistant_x=equidistant_x, aspect_1_1=aspect_1_1, no_title=no_title)
 
     return csv_path
 
 
 def generate_comparative_plots(local_csv: Path, remote_csv: Path,
                                output_dir: Path, test_name: str = "test1",
+                               equidistant_x: bool = False,
                                aspect_1_1: bool = False,
                                no_title: bool = False):
     """
@@ -412,6 +414,10 @@ def generate_comparative_plots(local_csv: Path, remote_csv: Path,
     r_avg = [remote_map_avg[v] for v in common_v]
     r_wc  = [remote_map_wc[v]  for v in common_v]
 
+    if equidistant_x:
+        x_coords = list(range(len(common_v)))
+    else:
+        x_coords = common_v
     x_labels   = [f"{int(v)}s" for v in common_v]
     test_label = test_name.upper()
     figsize = (8, 8) if aspect_1_1 else (11, 6)
@@ -425,13 +431,13 @@ def generate_comparative_plots(local_csv: Path, remote_csv: Path,
         color_local  = '#1f77b4'   # blue
         color_remote = '#d62728'   # red
 
-        ax.plot(common_v, l_avg, marker='o', markersize=8, linewidth=2.5,
+        ax.plot(x_coords, l_avg, marker='o', markersize=8, linewidth=2.5,
                 color=color_local,  label='Local Auth — Avg Latency')
-        ax.plot(common_v, r_avg, marker='s', markersize=8, linewidth=2.5,
+        ax.plot(x_coords, r_avg, marker='s', markersize=8, linewidth=2.5,
                 color=color_remote, label='Remote Auth — Avg Latency', linestyle='--')
 
         texts = []
-        for i, val in enumerate(common_v):
+        for i, val in enumerate(x_coords):
             texts.append(annotate_point(ax, f"{l_avg[i]:.2f}", (val, l_avg[i]),
                                         xytext=(-18, 8), color=color_local, fontsize=11))
             texts.append(annotate_point(ax, f"{r_avg[i]:.2f}", (val, r_avg[i]),
@@ -440,8 +446,10 @@ def generate_comparative_plots(local_csv: Path, remote_csv: Path,
 
         ax.set_xlabel('Relative Validity Period (seconds)', fontsize=14, labelpad=10)
         ax.set_ylabel('Average Monitor Latency (ms)', fontsize=14, labelpad=10)
-        ax.set_xticks(common_v)
+        ax.set_xticks(x_coords)
         ax.set_xticklabels(x_labels, fontsize=13)
+        if equidistant_x:
+            ax.set_xlim(-0.4, len(x_coords) - 0.6)
         ax.set_ylim(0, max(max(l_avg + r_avg, default=0) * 1.4, 20))
         ax.grid(True, linestyle='--', alpha=0.4)
         ax.legend(frameon=True, facecolor='white', framealpha=0.9, fontsize=12, loc='upper right')
@@ -468,13 +476,13 @@ def generate_comparative_plots(local_csv: Path, remote_csv: Path,
         color_local  = '#2ca02c'   # green
         color_remote = '#9467bd'   # purple
 
-        ax.plot(common_v, l_wc, marker='o', markersize=8, linewidth=2.5,
+        ax.plot(x_coords, l_wc, marker='o', markersize=8, linewidth=2.5,
                 color=color_local,  label='Local Auth — Worst-Case Latency')
-        ax.plot(common_v, r_wc, marker='s', markersize=8, linewidth=2.5,
+        ax.plot(x_coords, r_wc, marker='s', markersize=8, linewidth=2.5,
                 color=color_remote, label='Remote Auth — Worst-Case Latency', linestyle='--')
 
         texts = []
-        for i, val in enumerate(common_v):
+        for i, val in enumerate(x_coords):
             texts.append(annotate_point(ax, f"{l_wc[i]:.2f}", (val, l_wc[i]),
                                         xytext=(-18, 8), color=color_local, fontsize=11))
             texts.append(annotate_point(ax, f"{r_wc[i]:.2f}", (val, r_wc[i]),
@@ -483,8 +491,10 @@ def generate_comparative_plots(local_csv: Path, remote_csv: Path,
 
         ax.set_xlabel('Relative Validity Period (seconds)', fontsize=14, labelpad=10)
         ax.set_ylabel('Worst-Case Monitor Latency (ms)', fontsize=14, labelpad=10)
-        ax.set_xticks(common_v)
+        ax.set_xticks(x_coords)
         ax.set_xticklabels(x_labels, fontsize=13)
+        if equidistant_x:
+            ax.set_xlim(-0.4, len(x_coords) - 0.6)
         ax.set_ylim(0, max(max(l_wc + r_wc, default=0) * 1.4, 20))
         ax.grid(True, linestyle='--', alpha=0.4)
         ax.legend(frameon=True, facecolor='white', framealpha=0.9, fontsize=12, loc='upper right')
@@ -768,17 +778,22 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
     local_t, local_avg, local_wc, l_act_all, l_st_all = read_test2_csv(local_csv)
     remote_t, remote_avg, remote_wc, r_act_all, r_st_all = read_test2_csv(remote_csv)
 
-    local_map_avg = dict(zip(local_t, local_avg))
-    local_map_wc  = dict(zip(local_t, local_wc))
-    local_map_act = dict(zip(local_t, l_act_all))
-    local_map_st  = dict(zip(local_t, l_st_all))
-    remote_map_avg = dict(zip(remote_t, remote_avg))
-    remote_map_wc  = dict(zip(remote_t, remote_wc))
+    local_map_avg = {round(t, 6): avg for t, avg in zip(local_t, local_avg)}
+    local_map_wc  = {round(t, 6): wc  for t, wc  in zip(local_t, local_wc)}
+    local_map_act = {round(t, 6): act for t, act in zip(local_t, l_act_all)}
+    local_map_st  = {round(t, 6): st  for t, st  in zip(local_t, l_st_all)}
+    remote_map_avg = {round(t, 6): avg for t, avg in zip(remote_t, remote_avg)}
+    remote_map_wc  = {round(t, 6): wc  for t, wc  in zip(remote_t, remote_wc)}
 
-    common_t = sorted(set(local_t) & set(remote_t))
+    common_t = sorted(set(local_map_avg.keys()) & set(remote_map_avg.keys()))
     if not common_t:
-        print("⚠️  No common thresholds between local and remote CSVs.")
-        return
+        if len(local_t) == len(remote_t):
+            common_t = sorted([round(t, 6) for t in local_t])
+            remote_map_avg = {round(lt, 6): ra for lt, ra in zip(sorted(local_t), remote_avg)}
+            remote_map_wc  = {round(lt, 6): rw for lt, rw in zip(sorted(local_t), remote_wc)}
+        else:
+            print("⚠️  No common thresholds between local and remote CSVs.")
+            return
 
     l_avg = [local_map_avg[t]  for t in common_t]
     l_wc  = [local_map_wc[t]   for t in common_t]
@@ -1103,7 +1118,7 @@ def main():
         primary_csv = generate_plots_and_reports(
             validities, results, worst_case_results,
             output_dir, test_name=test_name, auth_mode=auth_mode,
-            aspect_1_1=args.aspect_1_1, no_title=args.no_title
+            equidistant_x=args.equidistant_x, aspect_1_1=args.aspect_1_1, no_title=args.no_title
         )
 
         # Step 3: if a compare CSV is provided, also generate comparative plots
@@ -1128,7 +1143,7 @@ def main():
                 print(f"   Remote CSV: {remote_csv}")
                 generate_comparative_plots(
                     local_csv, remote_csv, output_dir, test_name=test_name,
-                    aspect_1_1=args.aspect_1_1, no_title=args.no_title
+                    equidistant_x=args.equidistant_x, aspect_1_1=args.aspect_1_1, no_title=args.no_title
                 )
     print("\n✅ Done!\n")
 
