@@ -72,24 +72,32 @@ def compute_normalized_entropy(fast_tokens: list[int]) -> float:
 
 
 def extract_score_from_record(record: dict[str, Any]) -> float | None:
-    """Extract or compute normalized Shannon entropy from a log record."""
+    """Extract Maximum Peak-to-Peak Joint Variation (max_ptp) from a log record."""
     # 1. Direct field check if already precomputed
-    for key in ("normalized_entropy", "motion_proxy"):
+    for key in ("max_ptp", "motion_proxy"):
         if key in record and isinstance(record[key], (int, float)):
             return float(record[key])
 
-    # 2. Nested token_motion dictionary
-    if "token_motion" in record and isinstance(record["token_motion"], dict):
-        tm = record["token_motion"]
-        for key in ("normalized_entropy", "motion_proxy"):
-            if key in tm and isinstance(tm[key], (int, float)):
-                return float(tm[key])
+    # 2. Compute from aloha_actions_14d or decoded_actions logged in .jsonl
+    for key in ("aloha_actions_14d", "decoded_actions"):
+        raw = record.get(key)
+        if isinstance(raw, list) and len(raw) > 0:
+            arr = [ [float(x) for x in row] for row in raw if isinstance(row, list) ]
+            if arr and len(arr) > 0:
+                num_dims = min(14, len(arr[0]))
+                max_ptp = 0.0
+                for d in range(num_dims):
+                    vals = [row[d] for row in arr if len(row) > d]
+                    if vals:
+                        ptp = max(vals) - min(vals)
+                        if ptp > max_ptp:
+                            max_ptp = ptp
+                return max_ptp
 
-    # 3. Compute from fast_action_tokens if logged
+    # 3. Fallback to token entropy if no physical actions are present
     if "fast_action_tokens" in record and isinstance(record["fast_action_tokens"], list) and len(record["fast_action_tokens"]) > 0:
         return compute_normalized_entropy([int(x) for x in record["fast_action_tokens"]])
 
-    # 4. Compute from raw_paligemma_token_ids or tokens
     for raw_key in ("raw_paligemma_token_ids", "tokens", "token_ids"):
         raw = record.get(raw_key)
         if isinstance(raw, list) and len(raw) > 0:
@@ -201,20 +209,20 @@ def main() -> int:
     pos_scores = [s for s in scores if s > eps]
 
     print(f"📊 Extracted {total_records} record scores across {len(files)} run file(s).")
-    print(f"   ├─ Stationary / Zero-Entropy Records (s <= {eps}): {len(zero_scores)} ({len(zero_scores)/total_records*100:.1f}%)")
-    print(f"   └─ Strictly Positive Records (s > {eps}):          {len(pos_scores)} ({len(pos_scores)/total_records*100:.1f}%)")
+    print(f"   ├─ Stationary / Zero-Motion Records (s <= {eps}): {len(zero_scores)} ({len(zero_scores)/total_records*100:.1f}%)")
+    print(f"   └─ Strictly Positive Records (s > {eps}):         {len(pos_scores)} ({len(pos_scores)/total_records*100:.1f}%)")
 
     # Derive 5 threshold values
     # 1. Stationary Bypass (exact 0.0000)
     t1 = 0.0000
     # 2. Q25 of positive scores
-    t2 = calculate_percentile(pos_scores, 25.0) if pos_scores else 0.15
+    t2 = calculate_percentile(pos_scores, 25.0) if pos_scores else 0.01
     # 3. Q50 of positive scores
-    t3 = calculate_percentile(pos_scores, 50.0) if pos_scores else 0.35
+    t3 = calculate_percentile(pos_scores, 50.0) if pos_scores else 0.02
     # 4. Q75 of positive scores
-    t4 = calculate_percentile(pos_scores, 75.0) if pos_scores else 0.55
+    t4 = calculate_percentile(pos_scores, 75.0) if pos_scores else 0.05
     # 5. 100% Bypass Ceiling
-    t5 = max(scores) + 0.05
+    t5 = max(scores) + 0.01
 
     # Round thresholds cleanly
     fmt = f"{{:.{args.decimals}f}}"
@@ -227,11 +235,11 @@ def main() -> int:
     ]
 
     labels = [
-        "Stationary Bypass (H=0)",
-        "25th Percentile (S_pos)",
-        "50th Percentile / Median (S_pos)",
-        "75th Percentile (S_pos)",
-        "100% Bypass Ceiling (Max + 0.05)",
+        "Stationary Bypass (0 Motion)",
+        "25th Percentile (max_ptp)",
+        "50th Percentile / Median (max_ptp)",
+        "75th Percentile (max_ptp)",
+        "100% Bypass Ceiling (Max + 0.01)",
     ]
 
     print("\n" + "=" * 80)
