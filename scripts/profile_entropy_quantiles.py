@@ -222,23 +222,23 @@ def main() -> int:
         )
         return 1
 
-    # Apply 95th Percentile Trimming (Q95) to filter non-stationary kinematic transients
-    q95 = calculate_percentile(pos_scores, 95.0)
-    trimmed_pos = [s for s in pos_scores if s <= q95]
+    # Apply 85th Percentile Trimming (Q85) to isolate the core continuous manipulation envelope
+    q85 = calculate_percentile(pos_scores, 85.0)
+    trimmed_pos = [s for s in pos_scores if s <= q85]
     if not trimmed_pos:
         trimmed_pos = pos_scores
 
-    # Derive 5 purely data-driven threshold values across the trimmed steady-state motion envelope
+    # Derive 5 purely data-driven threshold values across the core manipulation envelope
     # 1. Stationary Bypass (exact 0.0000)
     t1 = 0.0000
-    # 2. Q25 of steady-state positive motion
+    # 2. Q25 of core continuous manipulation
     t2 = calculate_percentile(trimmed_pos, 25.0)
-    # 3. Q50 (Median) of steady-state positive motion
+    # 3. Q50 (Median) of core continuous manipulation
     t3 = calculate_percentile(trimmed_pos, 50.0)
-    # 4. Q75 of steady-state positive motion
+    # 4. Q75 of core continuous manipulation
     t4 = calculate_percentile(trimmed_pos, 75.0)
-    # 5. Q95 Upper Kinematic Ceiling
-    t5 = q95
+    # 5. Q85 Core Manipulation Ceiling
+    t5 = q85
 
     # Round thresholds cleanly
     fmt = f"{{:.{args.decimals}f}}"
@@ -255,7 +255,7 @@ def main() -> int:
         "25th Percentile (Q25 Trimmed)",
         "50th Percentile / Median (Q50 Trimmed)",
         "75th Percentile (Q75 Trimmed)",
-        "95th Percentile Kinematic Ceiling (Q95)",
+        "85th Percentile Core Manipulation Ceiling (Q85)",
     ]
 
     print("\n" + "=" * 80)
