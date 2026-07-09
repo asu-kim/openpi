@@ -84,7 +84,7 @@ while [[ "$#" -gt 0 ]]; do
                 exit 1
             fi
             ;;
-        --equidistant-x|--equidistant|--show-active-rate|--show-still-rate|--aspect-1-1|--square|--aspect-ratio-1-1)
+        --equidistant-x|--equidistant|--show-active-rate|--show-still-rate|--aspect-1-1|--square|--aspect-ratio-1-1|--no-title)
             PLOT_ARGS+=("$1")
             shift
             ;;
