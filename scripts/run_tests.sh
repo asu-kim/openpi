@@ -27,6 +27,7 @@ AUTH_MODE=""
 AUTH_PASSWORD="1234"
 RUNS="5"
 BYPASS_MODE="still"
+PLOT_ARGS=()
 
 if [ "$#" -eq 0 ]; then
     echo "❌ Error: No arguments provided."
@@ -82,6 +83,10 @@ while [[ "$#" -gt 0 ]]; do
                 echo "❌ Error: --bypass-mode requires a value (still or active)."
                 exit 1
             fi
+            ;;
+        --equidistant-x|--equidistant|--show-active-rate|--show-still-rate)
+            PLOT_ARGS+=("$1")
+            shift
             ;;
         *)
             echo "❌ Error: Unknown argument '$1'"
@@ -480,10 +485,10 @@ elif [ "$TEST_NAME" = "test2" ]; then
             --reports-dir "$OUTPUT_DIR" \
             --compare-csv "$OTHER_CSV" \
             --bypass-mode "$BYPASS_MODE" \
-            "${@:3}"
+            "${PLOT_ARGS[@]}"
     else
         echo "ℹ️  Only $AUTH_MODE Test 2 data found. Generating single-mode graphs."
-        python3 scripts/plot_results.py --reports-dir "$OUTPUT_DIR" --bypass-mode "$BYPASS_MODE" "${@:3}"
+        python3 scripts/plot_results.py --reports-dir "$OUTPUT_DIR" --bypass-mode "$BYPASS_MODE" "${PLOT_ARGS[@]}"
     fi
 else
     python3 scripts/plot_results.py --reports-dir "$OUTPUT_DIR" --bypass-mode "$BYPASS_MODE"

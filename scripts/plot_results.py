@@ -566,28 +566,28 @@ def read_test2_csv(csv_path: Path) -> tuple[list, list, list, list, list]:
     return thresholds, avg_latencies, wc_latencies, active_rates, still_rates
 
 
-def _add_rate_twinx(ax, thresholds, active_rates, still_rates, show_active: bool, show_still: bool):
+def _add_rate_twinx(ax, x_coords, active_rates, still_rates, show_active: bool, show_still: bool):
     if not show_active and not show_still:
         return
     ax2 = ax.twinx()
     lines = []
     labels = []
     if show_active and active_rates:
-        l1, = ax2.plot(thresholds, active_rates, marker='^', markersize=7, linewidth=2,
+        l1, = ax2.plot(x_coords, active_rates, marker='^', markersize=7, linewidth=2,
                        linestyle=':', color='#ff7f0e', label='% Active Rate')
         lines.append(l1)
         labels.append('% Active Rate')
-        for i, t in enumerate(thresholds):
-            ax2.annotate(f"{active_rates[i]:.1f}%", (t, active_rates[i]),
+        for i, x in enumerate(x_coords):
+            ax2.annotate(f"{active_rates[i]:.1f}%", (x, active_rates[i]),
                          textcoords="offset points", xytext=(0, -14),
                          ha='center', fontsize=8.5, color='#ff7f0e', fontweight='bold')
     if show_still and still_rates:
-        l2, = ax2.plot(thresholds, still_rates, marker='v', markersize=7, linewidth=2,
+        l2, = ax2.plot(x_coords, still_rates, marker='v', markersize=7, linewidth=2,
                        linestyle=':', color='#2ca02c', label='% Still Rate (Bypass)')
         lines.append(l2)
         labels.append('% Still Rate (Bypass)')
-        for i, t in enumerate(thresholds):
-            ax2.annotate(f"{still_rates[i]:.1f}%", (t, still_rates[i]),
+        for i, x in enumerate(x_coords):
+            ax2.annotate(f"{still_rates[i]:.1f}%", (x, still_rates[i]),
                          textcoords="offset points", xytext=(0, 14),
                          ha='center', fontsize=8.5, color='#2ca02c', fontweight='bold')
 
@@ -600,7 +600,8 @@ def _add_rate_twinx(ax, thresholds, active_rates, still_rates, show_active: bool
 def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies: list,
                             active_rates: list, still_rates: list,
                             output_dir: Path, test_name: str, auth_mode: str,
-                            show_active: bool = False, show_still: bool = False):
+                            show_active: bool = False, show_still: bool = False,
+                            equidistant_x: bool = False):
     """Render two separate single-mode graphs for Test 2: Average Latency & Worst-Case Latency."""
     if not MATPLOTLIB_AVAILABLE:
         print("\n⚠️  Warning: matplotlib is not available.")
@@ -609,26 +610,34 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
     test_label = test_name.upper()
     mode_label = auth_mode.capitalize() + " Auth"
 
+    if equidistant_x:
+        x_coords = list(range(len(thresholds)))
+    else:
+        x_coords = thresholds
+    x_labels = [f"{t:.4f}" for t in thresholds]
+
     # ── Graph 1: Average Monitor Latency vs. Threshold ───────────────────────
     try:
         color_lat = '#1f77b4'
         fig, ax = plt.subplots(figsize=(11, 6), dpi=300)
-        ax.plot(thresholds, avg_latencies, marker='o', markersize=8, linewidth=2.5,
+        ax.plot(x_coords, avg_latencies, marker='o', markersize=8, linewidth=2.5,
                 color=color_lat, label='Avg Monitor Latency')
-        for i, t in enumerate(thresholds):
-            ax.annotate(f"{avg_latencies[i]:.2f} ms", (t, avg_latencies[i]),
+        for i, x in enumerate(x_coords):
+            ax.annotate(f"{avg_latencies[i]:.2f} ms", (x, avg_latencies[i]),
                          textcoords="offset points", xytext=(0, 12),
                          ha='center', fontweight='bold', color=color_lat)
 
         ax.set_xlabel('Motion Threshold Value (τ)', fontsize=12, labelpad=10)
         ax.set_ylabel('Average Monitor Latency (ms)', fontsize=12, color=color_lat, labelpad=10)
-        ax.set_xticks(thresholds)
-        ax.set_xticklabels([f"{t:.4f}" for t in thresholds], fontsize=11)
+        ax.set_xticks(x_coords)
+        ax.set_xticklabels(x_labels, fontsize=11)
+        if equidistant_x:
+            ax.set_xlim(-0.4, len(x_coords) - 0.6)
         ax.set_ylim(0, max(max(avg_latencies, default=0) * 1.4, 20))
         ax.grid(True, linestyle='--', alpha=0.4)
         ax.legend(frameon=True, facecolor='white', framealpha=0.9, fontsize=10, loc='upper right')
 
-        _add_rate_twinx(ax, thresholds, active_rates, still_rates, show_active, show_still)
+        _add_rate_twinx(ax, x_coords, active_rates, still_rates, show_active, show_still)
 
         plot_title = f"{test_label}: Average Monitor Latency vs. Motion Threshold — {mode_label}"
         fig.suptitle(plot_title, fontsize=14, fontweight='bold', y=1.01)
@@ -647,22 +656,24 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
     try:
         color_wc = '#d62728'
         fig, ax = plt.subplots(figsize=(11, 6), dpi=300)
-        ax.plot(thresholds, wc_latencies, marker='s', markersize=8, linewidth=2.5,
+        ax.plot(x_coords, wc_latencies, marker='s', markersize=8, linewidth=2.5,
                 linestyle='--', color=color_wc, label='Worst-Case Monitor Latency')
-        for i, t in enumerate(thresholds):
-            ax.annotate(f"{wc_latencies[i]:.2f} ms", (t, wc_latencies[i]),
+        for i, x in enumerate(x_coords):
+            ax.annotate(f"{wc_latencies[i]:.2f} ms", (x, wc_latencies[i]),
                          textcoords="offset points", xytext=(0, 12),
                          ha='center', fontweight='bold', color=color_wc)
 
         ax.set_xlabel('Motion Threshold Value (τ)', fontsize=12, labelpad=10)
         ax.set_ylabel('Worst-Case Monitor Latency (ms)', fontsize=12, color=color_wc, labelpad=10)
-        ax.set_xticks(thresholds)
-        ax.set_xticklabels([f"{t:.4f}" for t in thresholds], fontsize=11)
+        ax.set_xticks(x_coords)
+        ax.set_xticklabels(x_labels, fontsize=11)
+        if equidistant_x:
+            ax.set_xlim(-0.4, len(x_coords) - 0.6)
         ax.set_ylim(0, max(max(wc_latencies, default=0) * 1.4, 20))
         ax.grid(True, linestyle='--', alpha=0.4)
         ax.legend(frameon=True, facecolor='white', framealpha=0.9, fontsize=10, loc='upper right')
 
-        _add_rate_twinx(ax, thresholds, active_rates, still_rates, show_active, show_still)
+        _add_rate_twinx(ax, x_coords, active_rates, still_rates, show_active, show_still)
 
         plot_title = f"{test_label}: Worst-Case Monitor Latency vs. Motion Threshold — {mode_label}"
         fig.suptitle(plot_title, fontsize=14, fontweight='bold', y=1.01)
@@ -680,7 +691,8 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
 
 def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
                                      output_dir: Path, test_name: str = "test2",
-                                     show_active: bool = False, show_still: bool = False):
+                                     show_active: bool = False, show_still: bool = False,
+                                     equidistant_x: bool = False):
     """Generate two separate comparative plots for Test 2 from threshold_vs_latency.csv files."""
     if not MATPLOTLIB_AVAILABLE:
         print("\n⚠️  Warning: matplotlib is not available — comparative plots skipped.")
@@ -709,34 +721,40 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
     r_avg = [remote_map_avg[t] for t in common_t]
     r_wc  = [remote_map_wc[t]  for t in common_t]
 
+    if equidistant_x:
+        x_coords = list(range(len(common_t)))
+    else:
+        x_coords = common_t
     x_labels   = [f"{t:.4f}" for t in common_t]
     test_label = test_name.upper()
 
     # ── Plot 1: Average Latency (Local vs Remote) ────────────────────────────
     try:
         fig, ax = plt.subplots(figsize=(11, 6), dpi=300)
-        ax.plot(common_t, l_avg, marker='o', markersize=8, linewidth=2.5,
+        ax.plot(x_coords, l_avg, marker='o', markersize=8, linewidth=2.5,
                 color='#1f77b4', label='Local Auth — Avg Latency')
-        ax.plot(common_t, r_avg, marker='s', markersize=8, linewidth=2.5,
+        ax.plot(x_coords, r_avg, marker='s', markersize=8, linewidth=2.5,
                 color='#d62728', label='Remote Auth — Avg Latency', linestyle='--')
 
-        for i, t in enumerate(common_t):
-            ax.annotate(f"{l_avg[i]:.2f}", (t, l_avg[i]),
+        for i, x in enumerate(x_coords):
+            ax.annotate(f"{l_avg[i]:.2f}", (x, l_avg[i]),
                         textcoords="offset points", xytext=(-18, 8),
                         ha='center', fontsize=9, fontweight='bold', color='#1f77b4')
-            ax.annotate(f"{r_avg[i]:.2f}", (t, r_avg[i]),
+            ax.annotate(f"{r_avg[i]:.2f}", (x, r_avg[i]),
                         textcoords="offset points", xytext=(18, 8),
                         ha='center', fontsize=9, fontweight='bold', color='#d62728')
 
         ax.set_xlabel('Motion Threshold Value (τ)', fontsize=12, labelpad=10)
         ax.set_ylabel('Average Monitor Latency (ms)', fontsize=12, labelpad=10)
-        ax.set_xticks(common_t)
+        ax.set_xticks(x_coords)
         ax.set_xticklabels(x_labels, fontsize=11)
+        if equidistant_x:
+            ax.set_xlim(-0.4, len(x_coords) - 0.6)
         ax.set_ylim(0, max(max(l_avg + r_avg, default=0) * 1.4, 20))
         ax.grid(True, linestyle='--', alpha=0.4)
         ax.legend(frameon=True, facecolor='white', framealpha=0.9, fontsize=10, loc='upper right')
 
-        _add_rate_twinx(ax, common_t, l_act, l_st, show_active, show_still)
+        _add_rate_twinx(ax, x_coords, l_act, l_st, show_active, show_still)
 
         plot_title = f"{test_label}: Average Monitor Latency vs. Threshold — Local vs. Remote Auth"
         fig.suptitle(plot_title, fontsize=14, fontweight='bold', y=1.01)
@@ -753,28 +771,30 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
     # ── Plot 2: Worst-Case Latency (Local vs Remote) ─────────────────────────
     try:
         fig, ax = plt.subplots(figsize=(11, 6), dpi=300)
-        ax.plot(common_t, l_wc, marker='o', markersize=8, linewidth=2.5,
+        ax.plot(x_coords, l_wc, marker='o', markersize=8, linewidth=2.5,
                 color='#2ca02c', label='Local Auth — Worst-Case Latency')
-        ax.plot(common_t, r_wc, marker='s', markersize=8, linewidth=2.5,
+        ax.plot(x_coords, r_wc, marker='s', markersize=8, linewidth=2.5,
                 color='#9467bd', label='Remote Auth — Worst-Case Latency', linestyle='--')
 
-        for i, t in enumerate(common_t):
-            ax.annotate(f"{l_wc[i]:.2f}", (t, l_wc[i]),
+        for i, x in enumerate(x_coords):
+            ax.annotate(f"{l_wc[i]:.2f}", (x, l_wc[i]),
                         textcoords="offset points", xytext=(-18, 8),
                         ha='center', fontsize=9, fontweight='bold', color='#2ca02c')
-            ax.annotate(f"{r_wc[i]:.2f}", (t, r_wc[i]),
+            ax.annotate(f"{r_wc[i]:.2f}", (x, r_wc[i]),
                         textcoords="offset points", xytext=(18, 8),
                         ha='center', fontsize=9, fontweight='bold', color='#9467bd')
 
         ax.set_xlabel('Motion Threshold Value (τ)', fontsize=12, labelpad=10)
         ax.set_ylabel('Worst-Case Monitor Latency (ms)', fontsize=12, labelpad=10)
-        ax.set_xticks(common_t)
+        ax.set_xticks(x_coords)
         ax.set_xticklabels(x_labels, fontsize=11)
+        if equidistant_x:
+            ax.set_xlim(-0.4, len(x_coords) - 0.6)
         ax.set_ylim(0, max(max(l_wc + r_wc, default=0) * 1.4, 20))
         ax.grid(True, linestyle='--', alpha=0.4)
         ax.legend(frameon=True, facecolor='white', framealpha=0.9, fontsize=10, loc='upper right')
 
-        _add_rate_twinx(ax, common_t, l_act, l_st, show_active, show_still)
+        _add_rate_twinx(ax, x_coords, l_act, l_st, show_active, show_still)
 
         plot_title = f"{test_label}: Worst-Case Monitor Latency vs. Threshold — Local vs. Remote Auth"
         fig.suptitle(plot_title, fontsize=14, fontweight='bold', y=1.01)
@@ -793,7 +813,8 @@ def generate_test2_plots_and_reports(thresholds: list, results: dict, worst_case
                                      active_results: dict, still_results: dict,
                                      output_dir: Path, test_name: str = "test2",
                                      auth_mode: str = "local",
-                                     show_active: bool = False, show_still: bool = False) -> Path:
+                                     show_active: bool = False, show_still: bool = False,
+                                     equidistant_x: bool = False) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     summary_rows = []
@@ -853,7 +874,8 @@ def generate_test2_plots_and_reports(thresholds: list, results: dict, worst_case
 
     # Render single-mode graphs from CSV
     _plot_test2_single_mode(thresholds, avg_latencies, wc_latencies, active_rates, still_rates,
-                            output_dir, test_name, auth_mode, show_active=show_active, show_still=show_still)
+                            output_dir, test_name, auth_mode, show_active=show_active, show_still=show_still,
+                            equidistant_x=equidistant_x)
 
     return csv_path
 
@@ -904,6 +926,10 @@ def main():
         "--show-still-rate", action="store_true",
         help="Include the average %% Still Rate (Bypass Rate) on a secondary y-axis for Test 2 graphs."
     )
+    parser.add_argument(
+        "--equidistant-x", "--equidistant", action="store_true", dest="equidistant_x",
+        help="Plot Test 2 x-axis points at equidistant categorical intervals rather than continuous numerical positions on the number line."
+    )
     args = parser.parse_args()
 
     reports_dir = Path(args.reports_dir).resolve()
@@ -944,7 +970,8 @@ def main():
         primary_csv = generate_test2_plots_and_reports(
             thresholds, results, wc_results, active_results, still_results,
             output_dir, test_name=test_name, auth_mode=auth_mode,
-            show_active=args.show_active_rate, show_still=args.show_still_rate
+            show_active=args.show_active_rate, show_still=args.show_still_rate,
+            equidistant_x=args.equidistant_x
         )
 
         compare_csv = Path(args.compare_csv).resolve() if args.compare_csv else None
@@ -961,7 +988,8 @@ def main():
                 print(f"   Remote CSV: {remote_csv}")
                 generate_test2_comparative_plots(
                     local_csv, remote_csv, output_dir, test_name=test_name,
-                    show_active=args.show_active_rate, show_still=args.show_still_rate
+                    show_active=args.show_active_rate, show_still=args.show_still_rate,
+                    equidistant_x=args.equidistant_x
                 )
     else:
         # ── Test 1: validity vs. monitor latency ──────────────────────────────
