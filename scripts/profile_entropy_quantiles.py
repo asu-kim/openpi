@@ -222,23 +222,25 @@ def main() -> int:
         )
         return 1
 
-    # Apply 85th Percentile Trimming (Q85) to isolate the core continuous manipulation envelope
-    q85 = calculate_percentile(pos_scores, 85.0)
-    trimmed_pos = [s for s in pos_scores if s <= q85]
-    if not trimmed_pos:
-        trimmed_pos = pos_scores
+    # Isolate the Core Continuous Manipulation Envelope (<= Q50 of positive motion)
+    # The upper half (> Q50) represents step-0 initialization jumps and inter-episode transitions
+    # where the active authentication rate converges to 0.0%.
+    q50_ceiling = calculate_percentile(pos_scores, 50.0)
+    cont_pos = [s for s in pos_scores if s <= q50_ceiling]
+    if not cont_pos:
+        cont_pos = pos_scores
 
-    # Derive 5 purely data-driven threshold values across the core manipulation envelope
+    # Derive 5 purely data-driven threshold values across the continuous manipulation envelope
     # 1. Stationary Bypass (exact 0.0000)
     t1 = 0.0000
-    # 2. Q25 of core continuous manipulation
-    t2 = calculate_percentile(trimmed_pos, 25.0)
-    # 3. Q50 (Median) of core continuous manipulation
-    t3 = calculate_percentile(trimmed_pos, 50.0)
-    # 4. Q75 of core continuous manipulation
-    t4 = calculate_percentile(trimmed_pos, 75.0)
-    # 5. Q85 Core Manipulation Ceiling
-    t5 = q85
+    # 2. Q25 of Continuous Manipulation Envelope
+    t2 = calculate_percentile(cont_pos, 25.0)
+    # 3. Q50 (Median) of Continuous Manipulation Envelope
+    t3 = calculate_percentile(cont_pos, 50.0)
+    # 4. Q75 of Continuous Manipulation Envelope
+    t4 = calculate_percentile(cont_pos, 75.0)
+    # 5. Q100 Continuous Manipulation Envelope Ceiling (= Q50 of all positive motion)
+    t5 = max(cont_pos)
 
     # Round thresholds cleanly
     fmt = f"{{:.{args.decimals}f}}"
@@ -252,11 +254,19 @@ def main() -> int:
 
     labels = [
         "Stationary Bypass (0 Motion)",
-        "25th Percentile (Q25 Trimmed)",
-        "50th Percentile / Median (Q50 Trimmed)",
-        "75th Percentile (Q75 Trimmed)",
-        "85th Percentile Core Manipulation Ceiling (Q85)",
+        "25th Percentile (Q25 Continuous Envelope)",
+        "50th Percentile (Q50 Continuous Envelope)",
+        "75th Percentile (Q75 Continuous Envelope)",
+        "Continuous Envelope Ceiling (Q100 Continuous / Q50 Overall)",
     ]
+
+    print("\n" + "=" * 80)
+    print("EMPIRICAL DATA OBSERVATION & CONTINUOUS ENVELOPE ISOLATION")
+    print("=" * 80)
+    print(f"  • Total Positive Records:           {len(pos_scores)}")
+    print(f"  • Empirical Median Boundary (Q50):  {q50_ceiling:.4f} rad/chunk")
+    print(f"  • Core Continuous Envelope (<=Q50): {len(cont_pos)} records ({len(cont_pos)/len(pos_scores)*100:.1f}%)")
+    print(f"  • Initialization/Reset Spikes (>Q50): {len(pos_scores)-len(cont_pos)} records (Active Rate converges to 0.0%)")
 
     print("\n" + "=" * 80)
     print("CALIBRATED MOTION THRESHOLDS (5 OPERATING POINTS)")
