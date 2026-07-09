@@ -293,11 +293,19 @@ if [ "$TEST_NAME" = "test1" ]; then
             fi
 
             # Prepare environment variables for Docker compose
+            HOST_CONFIG_PATH="$OPENPI_DIR/sst_config_creds/${AUTH_DIR}/testing/validity/val${VAL}/client_val_${VAL}.config"
             CONFIG_PATH="/app/sst_config_creds/${AUTH_DIR}/testing/validity/val${VAL}/client_val_${VAL}.config"
-            if [ ! -f "$OPENPI_DIR/sst_config_creds/${AUTH_DIR}/testing/validity/val${VAL}/client_val_${VAL}.config" ]; then
+            if [ ! -f "$HOST_CONFIG_PATH" ]; then
                 if [ -f "$OPENPI_DIR/sst_config_creds/${AUTH_DIR}/validity/val${VAL}/client_val_${VAL}.config" ]; then
+                    HOST_CONFIG_PATH="$OPENPI_DIR/sst_config_creds/${AUTH_DIR}/validity/val${VAL}/client_val_${VAL}.config"
                     CONFIG_PATH="/app/sst_config_creds/${AUTH_DIR}/validity/val${VAL}/client_val_${VAL}.config"
                 fi
+            fi
+            if [ ! -f "$HOST_CONFIG_PATH" ]; then
+                echo "❌ Error: Client config file for validity period ${VAL}s not found on host machine at:"
+                echo "   $HOST_CONFIG_PATH"
+                echo "   Please ensure ${AUTH_DIR} config files are placed in sst_config_creds/${AUTH_DIR}/."
+                exit 1
             fi
             export MONITOR_CONFIG="$CONFIG_PATH"
             export OPENPI_MOTION_THRESHOLD="0"
@@ -360,11 +368,19 @@ elif [ "$TEST_NAME" = "test2" ]; then
                 AUTH_DIR="local_auth"
             fi
 
+            HOST_CONFIG_PATH="$OPENPI_DIR/sst_config_creds/${AUTH_DIR}/testing/validity/val${VAL}/client_val_${VAL}.config"
             CONFIG_PATH="/app/sst_config_creds/${AUTH_DIR}/testing/validity/val${VAL}/client_val_${VAL}.config"
-            if [ ! -f "$OPENPI_DIR/sst_config_creds/${AUTH_DIR}/testing/validity/val${VAL}/client_val_${VAL}.config" ]; then
+            if [ ! -f "$HOST_CONFIG_PATH" ]; then
                 if [ -f "$OPENPI_DIR/sst_config_creds/${AUTH_DIR}/validity/val${VAL}/client_val_${VAL}.config" ]; then
+                    HOST_CONFIG_PATH="$OPENPI_DIR/sst_config_creds/${AUTH_DIR}/validity/val${VAL}/client_val_${VAL}.config"
                     CONFIG_PATH="/app/sst_config_creds/${AUTH_DIR}/validity/val${VAL}/client_val_${VAL}.config"
                 fi
+            fi
+            if [ ! -f "$HOST_CONFIG_PATH" ]; then
+                echo "❌ Error: Client config file for validity period ${VAL}s not found on host machine at:"
+                echo "   $HOST_CONFIG_PATH"
+                echo "   Please ensure ${AUTH_DIR} config files are placed in sst_config_creds/${AUTH_DIR}/."
+                exit 1
             fi
             export MONITOR_CONFIG="$CONFIG_PATH"
             export OPENPI_MOTION_THRESHOLD="$THRESH"
@@ -464,7 +480,7 @@ elif [ "$TEST_NAME" = "test2" ]; then
         OTHER_MODE="local"
     fi
 
-    OTHER_BASE="$TEST2_BASE/$OTHER_MODE"
+    OTHER_BASE="$TEST2_BASE/$OTHER_MODE/$BYPASS_MODE"
     OTHER_CSV=""
     if [ -d "$OTHER_BASE" ]; then
         for dir in $(ls -dt "$OTHER_BASE"/*/  2>/dev/null); do
