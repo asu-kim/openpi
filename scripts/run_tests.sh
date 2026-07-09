@@ -479,10 +479,11 @@ elif [ "$TEST_NAME" = "test2" ]; then
         python3 scripts/plot_results.py \
             --reports-dir "$OUTPUT_DIR" \
             --compare-csv "$OTHER_CSV" \
-            --bypass-mode "$BYPASS_MODE"
+            --bypass-mode "$BYPASS_MODE" \
+            "${@:3}"
     else
         echo "ℹ️  Only $AUTH_MODE Test 2 data found. Generating single-mode graphs."
-        python3 scripts/plot_results.py --reports-dir "$OUTPUT_DIR" --bypass-mode "$BYPASS_MODE"
+        python3 scripts/plot_results.py --reports-dir "$OUTPUT_DIR" --bypass-mode "$BYPASS_MODE" "${@:3}"
     fi
 else
     python3 scripts/plot_results.py --reports-dir "$OUTPUT_DIR" --bypass-mode "$BYPASS_MODE"

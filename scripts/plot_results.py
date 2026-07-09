@@ -477,16 +477,18 @@ def discover_test2_reports(reports_dir: Path) -> tuple[list, int]:
     return thresholds, runs
 
 
-def load_test2_reports(reports_dir: Path, thresholds: list, runs: int, bypass_mode: str = "still") -> tuple[dict, dict, dict]:
+def load_test2_reports(reports_dir: Path, thresholds: list, runs: int, bypass_mode: str = "still") -> tuple[dict, dict, dict, dict]:
     results = {t: [] for t in thresholds}
     wc_results = {t: [] for t in thresholds}
-    bypass_results = {t: [] for t in thresholds}
+    active_results = {t: [] for t in thresholds}
+    still_results = {t: [] for t in thresholds}
 
     for t in thresholds:
         for r in range(1, runs + 1):
             lat = 0.0
             wc_lat = 0.0
-            b_val = 0.0
+            act_val = 0.0
+            st_val = 0.0
             found_file = None
             for cand in sorted(reports_dir.glob(f"thresh_*_run_{r}.txt")):
                 m = re.match(r"thresh_([\d\.]+)_run_\d+\.txt", cand.name, re.IGNORECASE)
@@ -508,44 +510,44 @@ def load_test2_reports(reports_dir: Path, thresholds: list, runs: int, bypass_mo
                 else:
                     wc_lat = lat
 
-                if bypass_mode.lower() == "active":
-                    b_val = float(active_match.group(1)) if active_match else 0.0
-                else:
-                    b_val = float(still_match.group(1)) if still_match else 0.0
+                act_val = float(active_match.group(1)) if active_match else 0.0
+                st_val  = float(still_match.group(1)) if still_match else 0.0
 
-                print(f"✅ Loaded {found_file.name} -> avg: {lat:.2f} ms, bypass({bypass_mode}): {b_val:.2f}%")
+                print(f"✅ Loaded {found_file.name} -> avg: {lat:.2f} ms, active: {act_val:.2f}%, still: {st_val:.2f}%")
             else:
                 print(f"⚠️  Warning: Report not found for threshold {t} run {r} in {reports_dir}")
 
             results[t].append(lat)
             wc_results[t].append(wc_lat)
-            bypass_results[t].append(b_val)
+            active_results[t].append(act_val)
+            still_results[t].append(st_val)
 
-    return results, wc_results, bypass_results
+    return results, wc_results, active_results, still_results
 
 
 TEST2_CSV_NAME = "threshold_vs_latency.csv"
 
 
 def write_test2_csv(thresholds: list, avg_latencies: list, wc_latencies: list,
-                    output_dir: Path) -> Path:
+                    active_rates: list, still_rates: list, output_dir: Path) -> Path:
     """
     Write the aggregated Test 2 summary CSV.
-    Format: Threshold,Average_ms,WorstCase_ms (one row per threshold condition).
+    Format: Threshold,Average_ms,WorstCase_ms,Active_Rate_Pct,Still_Rate_Pct
     This is the single source of truth: graphs are always rendered from this file.
     """
     csv_path = output_dir / TEST2_CSV_NAME
     with open(csv_path, "w") as f:
-        f.write("Threshold,Average_ms,WorstCase_ms\n")
-        for t, avg, wc in zip(thresholds, avg_latencies, wc_latencies):
-            f.write(f"{t:.4f},{avg:.4f},{wc:.4f}\n")
+        f.write("Threshold,Average_ms,WorstCase_ms,Active_Rate_Pct,Still_Rate_Pct\n")
+        for t, avg, wc, act, st in zip(thresholds, avg_latencies, wc_latencies, active_rates, still_rates):
+            f.write(f"{t:.4f},{avg:.4f},{wc:.4f},{act:.2f},{st:.2f}\n")
     print(f"📊 CSV saved to: {csv_path}")
     return csv_path
 
 
-def read_test2_csv(csv_path: Path) -> tuple[list, list, list]:
-    """Read a Test 2 summary CSV and return (thresholds, avg_latencies, wc_latencies)."""
+def read_test2_csv(csv_path: Path) -> tuple[list, list, list, list, list]:
+    """Read a Test 2 summary CSV and return (thresholds, avg_latencies, wc_latencies, active_rates, still_rates)."""
     thresholds, avg_latencies, wc_latencies = [], [], []
+    active_rates, still_rates = [], []
     with open(csv_path) as f:
         f.readline()  # skip header
         for line in f:
@@ -557,11 +559,48 @@ def read_test2_csv(csv_path: Path) -> tuple[list, list, list]:
                 thresholds.append(float(parts[0]))
                 avg_latencies.append(float(parts[1]))
                 wc_latencies.append(float(parts[2]))
-    return thresholds, avg_latencies, wc_latencies
+                act = float(parts[3]) if len(parts) >= 4 else 0.0
+                st  = float(parts[4]) if len(parts) >= 5 else 0.0
+                active_rates.append(act)
+                still_rates.append(st)
+    return thresholds, avg_latencies, wc_latencies, active_rates, still_rates
+
+
+def _add_rate_twinx(ax, thresholds, active_rates, still_rates, show_active: bool, show_still: bool):
+    if not show_active and not show_still:
+        return
+    ax2 = ax.twinx()
+    lines = []
+    labels = []
+    if show_active and active_rates:
+        l1, = ax2.plot(thresholds, active_rates, marker='^', markersize=7, linewidth=2,
+                       linestyle=':', color='#ff7f0e', label='% Active Rate')
+        lines.append(l1)
+        labels.append('% Active Rate')
+        for i, t in enumerate(thresholds):
+            ax2.annotate(f"{active_rates[i]:.1f}%", (t, active_rates[i]),
+                         textcoords="offset points", xytext=(0, -14),
+                         ha='center', fontsize=8.5, color='#ff7f0e', fontweight='bold')
+    if show_still and still_rates:
+        l2, = ax2.plot(thresholds, still_rates, marker='v', markersize=7, linewidth=2,
+                       linestyle=':', color='#2ca02c', label='% Still Rate (Bypass)')
+        lines.append(l2)
+        labels.append('% Still Rate (Bypass)')
+        for i, t in enumerate(thresholds):
+            ax2.annotate(f"{still_rates[i]:.1f}%", (t, still_rates[i]),
+                         textcoords="offset points", xytext=(0, 14),
+                         ha='center', fontsize=8.5, color='#2ca02c', fontweight='bold')
+
+    ax2.set_ylabel('Percentage Rate (%)', fontsize=12, color='#555555', labelpad=10)
+    ax2.set_ylim(-5, 115)
+    l_lines, l_labels = ax.get_legend_handles_labels()
+    ax.legend(l_lines + lines, l_labels + labels, frameon=True, facecolor='white', framealpha=0.9, fontsize=10, loc='upper right')
 
 
 def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies: list,
-                            output_dir: Path, test_name: str, auth_mode: str):
+                            active_rates: list, still_rates: list,
+                            output_dir: Path, test_name: str, auth_mode: str,
+                            show_active: bool = False, show_still: bool = False):
     """Render two separate single-mode graphs for Test 2: Average Latency & Worst-Case Latency."""
     if not MATPLOTLIB_AVAILABLE:
         print("\n⚠️  Warning: matplotlib is not available.")
@@ -578,8 +617,8 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
                 color=color_lat, label='Avg Monitor Latency')
         for i, t in enumerate(thresholds):
             ax.annotate(f"{avg_latencies[i]:.2f} ms", (t, avg_latencies[i]),
-                        textcoords="offset points", xytext=(0, 12),
-                        ha='center', fontweight='bold', color=color_lat)
+                         textcoords="offset points", xytext=(0, 12),
+                         ha='center', fontweight='bold', color=color_lat)
 
         ax.set_xlabel('Motion Threshold Value (τ)', fontsize=12, labelpad=10)
         ax.set_ylabel('Average Monitor Latency (ms)', fontsize=12, color=color_lat, labelpad=10)
@@ -588,6 +627,8 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
         ax.set_ylim(0, max(max(avg_latencies, default=0) * 1.4, 20))
         ax.grid(True, linestyle='--', alpha=0.4)
         ax.legend(frameon=True, facecolor='white', framealpha=0.9, fontsize=10, loc='upper right')
+
+        _add_rate_twinx(ax, thresholds, active_rates, still_rates, show_active, show_still)
 
         plot_title = f"{test_label}: Average Monitor Latency vs. Motion Threshold — {mode_label}"
         fig.suptitle(plot_title, fontsize=14, fontweight='bold', y=1.01)
@@ -610,8 +651,8 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
                 linestyle='--', color=color_wc, label='Worst-Case Monitor Latency')
         for i, t in enumerate(thresholds):
             ax.annotate(f"{wc_latencies[i]:.2f} ms", (t, wc_latencies[i]),
-                        textcoords="offset points", xytext=(0, 12),
-                        ha='center', fontweight='bold', color=color_wc)
+                         textcoords="offset points", xytext=(0, 12),
+                         ha='center', fontweight='bold', color=color_wc)
 
         ax.set_xlabel('Motion Threshold Value (τ)', fontsize=12, labelpad=10)
         ax.set_ylabel('Worst-Case Monitor Latency (ms)', fontsize=12, color=color_wc, labelpad=10)
@@ -620,6 +661,8 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
         ax.set_ylim(0, max(max(wc_latencies, default=0) * 1.4, 20))
         ax.grid(True, linestyle='--', alpha=0.4)
         ax.legend(frameon=True, facecolor='white', framealpha=0.9, fontsize=10, loc='upper right')
+
+        _add_rate_twinx(ax, thresholds, active_rates, still_rates, show_active, show_still)
 
         plot_title = f"{test_label}: Worst-Case Monitor Latency vs. Motion Threshold — {mode_label}"
         fig.suptitle(plot_title, fontsize=14, fontweight='bold', y=1.01)
@@ -636,18 +679,21 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
 
 
 def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
-                                     output_dir: Path, test_name: str = "test2"):
+                                     output_dir: Path, test_name: str = "test2",
+                                     show_active: bool = False, show_still: bool = False):
     """Generate two separate comparative plots for Test 2 from threshold_vs_latency.csv files."""
     if not MATPLOTLIB_AVAILABLE:
         print("\n⚠️  Warning: matplotlib is not available — comparative plots skipped.")
         return
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    local_t, local_avg, local_wc = read_test2_csv(local_csv)
-    remote_t, remote_avg, remote_wc = read_test2_csv(remote_csv)
+    local_t, local_avg, local_wc, l_act_all, l_st_all = read_test2_csv(local_csv)
+    remote_t, remote_avg, remote_wc, r_act_all, r_st_all = read_test2_csv(remote_csv)
 
     local_map_avg = dict(zip(local_t, local_avg))
     local_map_wc  = dict(zip(local_t, local_wc))
+    local_map_act = dict(zip(local_t, l_act_all))
+    local_map_st  = dict(zip(local_t, l_st_all))
     remote_map_avg = dict(zip(remote_t, remote_avg))
     remote_map_wc  = dict(zip(remote_t, remote_wc))
 
@@ -658,6 +704,8 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
 
     l_avg = [local_map_avg[t]  for t in common_t]
     l_wc  = [local_map_wc[t]   for t in common_t]
+    l_act = [local_map_act[t]  for t in common_t]
+    l_st  = [local_map_st[t]   for t in common_t]
     r_avg = [remote_map_avg[t] for t in common_t]
     r_wc  = [remote_map_wc[t]  for t in common_t]
 
@@ -687,6 +735,8 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
         ax.set_ylim(0, max(max(l_avg + r_avg, default=0) * 1.4, 20))
         ax.grid(True, linestyle='--', alpha=0.4)
         ax.legend(frameon=True, facecolor='white', framealpha=0.9, fontsize=10, loc='upper right')
+
+        _add_rate_twinx(ax, common_t, l_act, l_st, show_active, show_still)
 
         plot_title = f"{test_label}: Average Monitor Latency vs. Threshold — Local vs. Remote Auth"
         fig.suptitle(plot_title, fontsize=14, fontweight='bold', y=1.01)
@@ -724,6 +774,8 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
         ax.grid(True, linestyle='--', alpha=0.4)
         ax.legend(frameon=True, facecolor='white', framealpha=0.9, fontsize=10, loc='upper right')
 
+        _add_rate_twinx(ax, common_t, l_act, l_st, show_active, show_still)
+
         plot_title = f"{test_label}: Worst-Case Monitor Latency vs. Threshold — Local vs. Remote Auth"
         fig.suptitle(plot_title, fontsize=14, fontweight='bold', y=1.01)
         fig.tight_layout()
@@ -738,57 +790,70 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
 
 
 def generate_test2_plots_and_reports(thresholds: list, results: dict, worst_case_results: dict,
-                                     bypass_results: dict, output_dir: Path, test_name: str = "test2",
-                                     auth_mode: str = "local", bypass_mode: str = "still") -> Path:
+                                     active_results: dict, still_results: dict,
+                                     output_dir: Path, test_name: str = "test2",
+                                     auth_mode: str = "local",
+                                     show_active: bool = False, show_still: bool = False) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     summary_rows = []
     avg_latencies = []
     wc_latencies = []
+    active_rates = []
+    still_rates = []
 
     for t in thresholds:
         runs = results[t]
         avg = sum(runs) / len(runs) if runs else 0.0
         wc_runs = worst_case_results.get(t, [])
         wc = max(wc_runs) if wc_runs else 0.0
+        act_runs = active_results.get(t, [])
+        act = sum(act_runs) / len(act_runs) if act_runs else 0.0
+        st_runs = still_results.get(t, [])
+        st = sum(st_runs) / len(st_runs) if st_runs else 0.0
 
         avg_latencies.append(avg)
         wc_latencies.append(wc)
+        active_rates.append(act)
+        still_rates.append(st)
 
         summary_rows.append({
             "threshold": t,
             "avg_lat": avg,
             "wc_lat": wc,
+            "active_pct": act,
+            "still_pct": st,
         })
 
     # Console table
-    print("\n" + "=" * 62)
-    print("MOTION THRESHOLD vs. MONITOR LATENCY TEST RESULTS")
-    print("=" * 62)
-    header = f"{'Threshold (τ)':>14} | {'Average (ms)':>14} | {'Worst-Case (ms)':>16}"
+    print("\n" + "=" * 80)
+    print("MOTION THRESHOLD vs. MONITOR LATENCY & RATES TEST RESULTS")
+    print("=" * 80)
+    header = f"{'Threshold (τ)':>14} | {'Average (ms)':>14} | {'Worst-Case (ms)':>16} | {'Active (%)':>11} | {'Still (%)':>10}"
     print(header)
     print("-" * len(header))
     for row in summary_rows:
-        print(f"{row['threshold']:>14.4f} | {row['avg_lat']:>14.2f} | {row['wc_lat']:>16.2f}")
-    print("=" * 62)
+        print(f"{row['threshold']:>14.4f} | {row['avg_lat']:>14.2f} | {row['wc_lat']:>16.2f} | {row['active_pct']:>11.2f} | {row['still_pct']:>10.2f}")
+    print("=" * 80)
 
     # Text report
     txt_path = output_dir / "threshold_vs_latency_report.txt"
     with open(txt_path, "w") as f:
-        f.write("MOTION THRESHOLD vs. MONITOR LATENCY TEST REPORT\n")
-        f.write("===============================================\n")
+        f.write("MOTION THRESHOLD vs. MONITOR LATENCY & RATES TEST REPORT\n")
+        f.write("========================================================\n")
         f.write(f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}\n\n")
         f.write(header + "\n")
         f.write("-" * len(header) + "\n")
         for row in summary_rows:
-            f.write(f"{row['threshold']:>14.4f} | {row['avg_lat']:>14.2f} | {row['wc_lat']:>16.2f}\n")
+            f.write(f"{row['threshold']:>14.4f} | {row['avg_lat']:>14.2f} | {row['wc_lat']:>16.2f} | {row['active_pct']:>11.2f} | {row['still_pct']:>10.2f}\n")
     print(f"📄 Text report saved to: {txt_path}")
 
     # Write CSV (single source of truth)
-    csv_path = write_test2_csv(thresholds, avg_latencies, wc_latencies, output_dir)
+    csv_path = write_test2_csv(thresholds, avg_latencies, wc_latencies, active_rates, still_rates, output_dir)
 
     # Render single-mode graphs from CSV
-    _plot_test2_single_mode(thresholds, avg_latencies, wc_latencies, output_dir, test_name, auth_mode)
+    _plot_test2_single_mode(thresholds, avg_latencies, wc_latencies, active_rates, still_rates,
+                            output_dir, test_name, auth_mode, show_active=show_active, show_still=show_still)
 
     return csv_path
 
@@ -831,6 +896,14 @@ def main():
              "and worst-case latency, each with local and remote on the same graph). "
              "The CSV must have been produced by a completed plot_results.py run."
     )
+    parser.add_argument(
+        "--show-active-rate", action="store_true",
+        help="Include the average %% Active Rate on a secondary y-axis for Test 2 graphs."
+    )
+    parser.add_argument(
+        "--show-still-rate", action="store_true",
+        help="Include the average %% Still Rate (Bypass Rate) on a secondary y-axis for Test 2 graphs."
+    )
     args = parser.parse_args()
 
     reports_dir = Path(args.reports_dir).resolve()
@@ -867,9 +940,12 @@ def main():
         print(f"Test / Mode : {test_name} / {auth_mode}")
         print("=" * 80)
 
-        results, wc_results, bypass_results = load_test2_reports(reports_dir, thresholds, runs, bypass_mode=args.bypass_mode)
-        primary_csv = generate_test2_plots_and_reports(thresholds, results, wc_results, bypass_results,
-                                                       output_dir, test_name=test_name, auth_mode=auth_mode, bypass_mode=args.bypass_mode)
+        results, wc_results, active_results, still_results = load_test2_reports(reports_dir, thresholds, runs, bypass_mode=args.bypass_mode)
+        primary_csv = generate_test2_plots_and_reports(
+            thresholds, results, wc_results, active_results, still_results,
+            output_dir, test_name=test_name, auth_mode=auth_mode,
+            show_active=args.show_active_rate, show_still=args.show_still_rate
+        )
 
         compare_csv = Path(args.compare_csv).resolve() if args.compare_csv else None
         if compare_csv:
@@ -883,7 +959,10 @@ def main():
                 print(f"\n📊 Generating Test 2 comparative plots from CSVs...")
                 print(f"   Local  CSV: {local_csv}")
                 print(f"   Remote CSV: {remote_csv}")
-                generate_test2_comparative_plots(local_csv, remote_csv, output_dir, test_name=test_name)
+                generate_test2_comparative_plots(
+                    local_csv, remote_csv, output_dir, test_name=test_name,
+                    show_active=args.show_active_rate, show_still=args.show_still_rate
+                )
     else:
         # ── Test 1: validity vs. monitor latency ──────────────────────────────
         compare_csv = Path(args.compare_csv).resolve() if args.compare_csv else None
