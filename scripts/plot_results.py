@@ -35,6 +35,16 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+# Central font configuration for every generated graph.
+BASE_FONT_SIZE = 12
+AXIS_LABEL_FONT_SIZE = 14
+AXIS_TITLE_FONT_SIZE = 16
+X_TICK_LABEL_FONT_SIZE = 13
+Y_TICK_LABEL_FONT_SIZE = 13
+LEGEND_FONT_SIZE = 12
+FIGURE_TITLE_FONT_SIZE = 16
+DATA_LABEL_FONT_SIZE = 16
+
 # Ensure MPLCONFIGDIR is set to a writable temporary directory to avoid permission errors on restricted/shared workstations
 if "MPLCONFIGDIR" not in os.environ:
     uid = getattr(os, "getuid", lambda: "default")()
@@ -51,12 +61,12 @@ try:
     import matplotlib.patheffects as path_effects
     MATPLOTLIB_AVAILABLE = True
     plt.rcParams.update({
-        'font.size': 12,
-        'axes.labelsize': 14,
-        'axes.titlesize': 16,
-        'xtick.labelsize': 13,
-        'ytick.labelsize': 13,
-        'legend.fontsize': 12,
+        'font.size': BASE_FONT_SIZE,
+        'axes.labelsize': AXIS_LABEL_FONT_SIZE,
+        'axes.titlesize': AXIS_TITLE_FONT_SIZE,
+        'xtick.labelsize': X_TICK_LABEL_FONT_SIZE,
+        'ytick.labelsize': Y_TICK_LABEL_FONT_SIZE,
+        'legend.fontsize': LEGEND_FONT_SIZE,
     })
     ADJUST_TEXT_AVAILABLE = False
 except ImportError:
@@ -141,7 +151,8 @@ def find_existing_summary_csv(reports_dir: Path, output_dir: Path,
     return None
 
 
-def annotate_point(ax, text, xy, xytext=(0, 12), color='black', fontsize=11, ha='center'):
+def annotate_point(ax, text, xy, xytext=(0, 12), color='black',
+                   fontsize=DATA_LABEL_FONT_SIZE, ha='center'):
     ann = ax.annotate(
         text, xy=xy,
         textcoords="offset points", xytext=xytext,
@@ -194,7 +205,7 @@ def set_threshold_x_ticks(ax, x_coords: list, thresholds: list,
     ax.set_xticks(x_coords)
     ax.set_xticklabels(
         labels,
-        fontsize=13,
+        fontsize=X_TICK_LABEL_FONT_SIZE,
         rotation=20 if log_x else 0,
         ha="right" if log_x else "center",
     )
@@ -402,16 +413,16 @@ def _plot_single_mode(validities: list, avg_latencies: list, wc_latencies: list,
         texts1 = []
         for i, val in enumerate(x_coords):
             texts1.append(annotate_point(ax1, f"{avg_latencies[i]:.2f} ms", (val, avg_latencies[i]),
-                                         xytext=(0, 12), color=color_avg, fontsize=11))
+                                         xytext=(0, 12), color=color_avg))
         optimize_annotations(texts1, ax=ax1)
 
-        ax1.set_xlabel('Relative Validity Period (seconds)', fontsize=14, labelpad=10)
-        ax1.set_ylabel('Avg Monitor Latency (ms)', fontsize=14, color=color_avg, labelpad=10)
+        ax1.set_xlabel('Relative Validity Period (seconds)', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
+        ax1.set_ylabel('Avg Monitor Latency (ms)', fontsize=AXIS_LABEL_FONT_SIZE, color=color_avg, labelpad=10)
         ax1.tick_params(axis='y', labelcolor=color_avg)
         if not log_y:
             ax1.set_ylim(0, max(max(avg_latencies, default=0) * LATENCY_Y_HEADROOM_FACTOR, 20))
         ax1.set_xticks(x_coords)
-        ax1.set_xticklabels(x_labels, fontsize=13)
+        ax1.set_xticklabels(x_labels, fontsize=X_TICK_LABEL_FONT_SIZE)
         if equidistant_x:
             ax1.set_xlim(-0.4, len(x_coords) - 0.6)
         ax1.grid(True, linestyle='--', alpha=0.4)
@@ -424,10 +435,10 @@ def _plot_single_mode(validities: list, avg_latencies: list, wc_latencies: list,
         texts2 = []
         for i, val in enumerate(x_coords):
             texts2.append(annotate_point(ax2, f"{wc_latencies[i]:.2f} ms", (val, wc_latencies[i]),
-                                         xytext=(0, 12), color=color_wc, fontsize=11))
+                                         xytext=(0, 12), color=color_wc))
         optimize_annotations(texts2, ax=ax2)
 
-        ax2.set_ylabel('Worst-Case Monitor Latency (ms)', fontsize=14,
+        ax2.set_ylabel('Worst-Case Monitor Latency (ms)', fontsize=AXIS_LABEL_FONT_SIZE,
                        color=color_wc, labelpad=10)
         ax2.tick_params(axis='y', labelcolor=color_wc)
         if not log_y:
@@ -439,7 +450,7 @@ def _plot_single_mode(validities: list, avg_latencies: list, wc_latencies: list,
         file_stem  = f"{test_name}_{auth_mode}_validity_vs_monitor_latency"
 
         if not no_title:
-            fig.suptitle(plot_title, fontsize=16, fontweight='bold', y=1.01)
+            fig.suptitle(plot_title, fontsize=FIGURE_TITLE_FONT_SIZE, fontweight='bold', y=1.01)
         finalize_plot_layout(fig, aspect_1_1)
 
         save_plot(fig, output_dir / f"{file_stem}.png", aspect_1_1)
@@ -584,25 +595,25 @@ def generate_comparative_plots(local_csv: Path, remote_csv: Path,
         texts = []
         for i, val in enumerate(x_coords):
             texts.append(annotate_point(ax, f"{l_avg[i]:.2f}", (val, l_avg[i]),
-                                        xytext=(0, 12), color=color_local, fontsize=11))
+                                        xytext=(0, 12), color=color_local))
             texts.append(annotate_point(ax, f"{r_avg[i]:.2f}", (val, r_avg[i]),
-                                        xytext=(0, 12), color=color_remote, fontsize=11))
+                                        xytext=(0, 12), color=color_remote))
         optimize_annotations(texts, ax=ax)
 
-        ax.set_xlabel('Relative Validity Period (seconds)', fontsize=14, labelpad=10)
-        ax.set_ylabel('Average Monitor Latency (ms)', fontsize=14, labelpad=10)
+        ax.set_xlabel('Relative Validity Period (seconds)', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
+        ax.set_ylabel('Average Monitor Latency (ms)', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
         ax.set_xticks(x_coords)
-        ax.set_xticklabels(x_labels, fontsize=13)
+        ax.set_xticklabels(x_labels, fontsize=X_TICK_LABEL_FONT_SIZE)
         if equidistant_x:
             ax.set_xlim(-0.4, len(x_coords) - 0.6)
         if not log_y:
             ax.set_ylim(0, max(max(l_avg + r_avg, default=0) * LATENCY_Y_HEADROOM_FACTOR, 20))
         ax.grid(True, linestyle='--', alpha=0.4)
-        ax.legend(frameon=True, facecolor='white', framealpha=0.9, fontsize=12, loc='upper right')
+        ax.legend(frameon=True, facecolor='white', framealpha=0.9, fontsize=LEGEND_FONT_SIZE, loc='upper right')
 
         plot_title = f"{test_label}: Average Monitor Latency vs. Validity Period — Local vs. Remote Auth"
         if not no_title:
-            fig.suptitle(plot_title, fontsize=16, fontweight='bold', y=1.01)
+            fig.suptitle(plot_title, fontsize=FIGURE_TITLE_FONT_SIZE, fontweight='bold', y=1.01)
         finalize_plot_layout(fig, aspect_1_1)
 
         stem = f"{test_name}_avg_latency_local_vs_remote"
@@ -631,25 +642,25 @@ def generate_comparative_plots(local_csv: Path, remote_csv: Path,
         texts = []
         for i, val in enumerate(x_coords):
             texts.append(annotate_point(ax, f"{l_wc[i]:.2f}", (val, l_wc[i]),
-                                        xytext=(0, 12), color=color_local, fontsize=11))
+                                        xytext=(0, 12), color=color_local))
             texts.append(annotate_point(ax, f"{r_wc[i]:.2f}", (val, r_wc[i]),
-                                        xytext=(0, 12), color=color_remote, fontsize=11))
+                                        xytext=(0, 12), color=color_remote))
         optimize_annotations(texts, ax=ax)
 
-        ax.set_xlabel('Relative Validity Period (seconds)', fontsize=14, labelpad=10)
-        ax.set_ylabel('Worst-Case Monitor Latency (ms)', fontsize=14, labelpad=10)
+        ax.set_xlabel('Relative Validity Period (seconds)', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
+        ax.set_ylabel('Worst-Case Monitor Latency (ms)', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
         ax.set_xticks(x_coords)
-        ax.set_xticklabels(x_labels, fontsize=13)
+        ax.set_xticklabels(x_labels, fontsize=X_TICK_LABEL_FONT_SIZE)
         if equidistant_x:
             ax.set_xlim(-0.4, len(x_coords) - 0.6)
         if not log_y:
             ax.set_ylim(0, max(max(l_wc + r_wc, default=0) * LATENCY_Y_HEADROOM_FACTOR, 20))
         ax.grid(True, linestyle='--', alpha=0.4)
-        ax.legend(frameon=True, facecolor='white', framealpha=0.9, fontsize=12, loc='upper right')
+        ax.legend(frameon=True, facecolor='white', framealpha=0.9, fontsize=LEGEND_FONT_SIZE, loc='upper right')
 
         plot_title = f"{test_label}: Worst-Case Monitor Latency vs. Validity Period — Local vs. Remote Auth"
         if not no_title:
-            fig.suptitle(plot_title, fontsize=16, fontweight='bold', y=1.01)
+            fig.suptitle(plot_title, fontsize=FIGURE_TITLE_FONT_SIZE, fontweight='bold', y=1.01)
         finalize_plot_layout(fig, aspect_1_1)
 
         stem = f"{test_name}_worstcase_latency_local_vs_remote"
@@ -791,7 +802,7 @@ def _add_rate_twinx(ax, x_coords, active_rates, still_rates, show_active: bool, 
         labels.append('% Active Rate')
         for i, x in enumerate(x_coords):
             texts.append(annotate_point(ax2, f"{active_rates[i]:.1f}%", (x, active_rates[i]),
-                                        xytext=(0, 12), color='#ff7f0e', fontsize=10.5))
+                                        xytext=(0, 12), color='#ff7f0e'))
     if show_still and still_rates:
         l2, = ax2.plot(x_coords, still_rates, marker='v', markersize=7, linewidth=2,
                        linestyle=':', color='#2ca02c', label='% Still Rate (Bypass)')
@@ -799,13 +810,13 @@ def _add_rate_twinx(ax, x_coords, active_rates, still_rates, show_active: bool, 
         labels.append('% Still Rate (Bypass)')
         for i, x in enumerate(x_coords):
             texts.append(annotate_point(ax2, f"{still_rates[i]:.1f}%", (x, still_rates[i]),
-                                        xytext=(0, 12), color='#2ca02c', fontsize=10.5))
+                                        xytext=(0, 12), color='#2ca02c'))
     optimize_annotations(texts, ax=ax2)
 
-    ax2.set_ylabel('Percentage Rate (%)', fontsize=14, color='#555555', labelpad=10)
+    ax2.set_ylabel('Percentage Rate (%)', fontsize=AXIS_LABEL_FONT_SIZE, color='#555555', labelpad=10)
     ax2.set_ylim(-5, 115)
     l_lines, l_labels = ax.get_legend_handles_labels()
-    ax.legend(l_lines + lines, l_labels + labels, frameon=True, facecolor='white', framealpha=0.9, fontsize=12, loc='upper right')
+    ax.legend(l_lines + lines, l_labels + labels, frameon=True, facecolor='white', framealpha=0.9, fontsize=LEGEND_FONT_SIZE, loc='upper right')
 
 
 def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies: list,
@@ -839,11 +850,11 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
         texts = []
         for i, x in enumerate(x_coords):
             texts.append(annotate_point(ax, f"{avg_latencies[i]:.2f} ms", (x, avg_latencies[i]),
-                                        xytext=(0, 12), color=color_lat, fontsize=11))
+                                        xytext=(0, 12), color=color_lat))
         optimize_annotations(texts, ax=ax)
 
-        ax.set_xlabel('Motion Threshold Value (τ)', fontsize=14, labelpad=10)
-        ax.set_ylabel('Average Monitor Latency (ms)', fontsize=14, color=color_lat, labelpad=10)
+        ax.set_xlabel('Motion Threshold Value (τ)', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
+        ax.set_ylabel('Average Monitor Latency (ms)', fontsize=AXIS_LABEL_FONT_SIZE, color=color_lat, labelpad=10)
         set_threshold_x_ticks(ax, x_coords, thresholds, log_x)
         if equidistant_x:
             ax.set_xlim(-0.4, len(x_coords) - 0.6)
@@ -854,7 +865,7 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
 
         plot_title = f"{test_label}: Average Monitor Latency vs. Motion Threshold — {mode_label}"
         if not no_title:
-            fig.suptitle(plot_title, fontsize=16, fontweight='bold', y=1.01)
+            fig.suptitle(plot_title, fontsize=FIGURE_TITLE_FONT_SIZE, fontweight='bold', y=1.01)
         finalize_plot_layout(fig, aspect_1_1)
 
         file_stem = f"{test_name}_{auth_mode}_threshold_vs_avg_latency"
@@ -878,11 +889,11 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
         texts = []
         for i, x in enumerate(x_coords):
             texts.append(annotate_point(ax, f"{wc_latencies[i]:.2f} ms", (x, wc_latencies[i]),
-                                        xytext=(0, 12), color=color_wc, fontsize=11))
+                                        xytext=(0, 12), color=color_wc))
         optimize_annotations(texts, ax=ax)
 
-        ax.set_xlabel('Motion Threshold Value (τ)', fontsize=14, labelpad=10)
-        ax.set_ylabel('Worst-Case Monitor Latency (ms)', fontsize=14, color=color_wc, labelpad=10)
+        ax.set_xlabel('Motion Threshold Value (τ)', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
+        ax.set_ylabel('Worst-Case Monitor Latency (ms)', fontsize=AXIS_LABEL_FONT_SIZE, color=color_wc, labelpad=10)
         set_threshold_x_ticks(ax, x_coords, thresholds, log_x)
         if equidistant_x:
             ax.set_xlim(-0.4, len(x_coords) - 0.6)
@@ -893,7 +904,7 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
 
         plot_title = f"{test_label}: Worst-Case Monitor Latency vs. Motion Threshold — {mode_label}"
         if not no_title:
-            fig.suptitle(plot_title, fontsize=16, fontweight='bold', y=1.01)
+            fig.suptitle(plot_title, fontsize=FIGURE_TITLE_FONT_SIZE, fontweight='bold', y=1.01)
         finalize_plot_layout(fig, aspect_1_1)
 
         file_stem = f"{test_name}_{auth_mode}_threshold_vs_worstcase_latency"
@@ -990,26 +1001,26 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
                 l_avg[i], r_avg[i], l_avg + r_avg
             )
             texts.append(annotate_point(ax, f"{l_avg[i]:.2f}", (x, l_avg[i]),
-                                        xytext=(0, local_offset), color='#1f77b4', fontsize=11))
+                                        xytext=(0, local_offset), color='#1f77b4'))
             texts.append(annotate_point(ax, f"{r_avg[i]:.2f}", (x, r_avg[i]),
-                                        xytext=(0, remote_offset), color='#d62728', fontsize=11))
+                                        xytext=(0, remote_offset), color='#d62728'))
         optimize_annotations(texts, ax=ax)
 
-        ax.set_xlabel('Motion Threshold Value (τ)', fontsize=14, labelpad=10)
-        ax.set_ylabel('Average Monitor Latency (ms)', fontsize=14, labelpad=10)
+        ax.set_xlabel('Motion Threshold Value (τ)', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
+        ax.set_ylabel('Average Monitor Latency (ms)', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
         set_threshold_x_ticks(ax, x_coords, common_t, log_x)
         if equidistant_x:
             ax.set_xlim(-0.4, len(x_coords) - 0.6)
         if not log_y:
             ax.set_ylim(0, max(max(l_avg + r_avg, default=0) * LATENCY_Y_HEADROOM_FACTOR, 20))
         ax.grid(True, linestyle='--', alpha=0.4)
-        ax.legend(frameon=True, facecolor='white', framealpha=0.9, fontsize=12, loc='upper right')
+        ax.legend(frameon=True, facecolor='white', framealpha=0.9, fontsize=LEGEND_FONT_SIZE, loc='upper right')
 
         _add_rate_twinx(ax, x_coords, plot_act, plot_st, show_active, show_still)
 
         plot_title = f"{test_label}: Average Monitor Latency vs. Threshold — Local vs. Remote Auth"
         if not no_title:
-            fig.suptitle(plot_title, fontsize=16, fontweight='bold', y=1.01)
+            fig.suptitle(plot_title, fontsize=FIGURE_TITLE_FONT_SIZE, fontweight='bold', y=1.01)
         finalize_plot_layout(fig, aspect_1_1)
 
         stem = f"{test_name}_avg_latency_local_vs_remote"
@@ -1037,26 +1048,26 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
                 l_wc[i], r_wc[i], l_wc + r_wc
             )
             texts.append(annotate_point(ax, f"{l_wc[i]:.2f}", (x, l_wc[i]),
-                                        xytext=(0, local_offset), color='#2ca02c', fontsize=11))
+                                        xytext=(0, local_offset), color='#2ca02c'))
             texts.append(annotate_point(ax, f"{r_wc[i]:.2f}", (x, r_wc[i]),
-                                        xytext=(0, remote_offset), color='#9467bd', fontsize=11))
+                                        xytext=(0, remote_offset), color='#9467bd'))
         optimize_annotations(texts, ax=ax)
 
-        ax.set_xlabel('Motion Threshold Value (τ)', fontsize=14, labelpad=10)
-        ax.set_ylabel('Worst-Case Monitor Latency (ms)', fontsize=14, labelpad=10)
+        ax.set_xlabel('Motion Threshold Value (τ)', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
+        ax.set_ylabel('Worst-Case Monitor Latency (ms)', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
         set_threshold_x_ticks(ax, x_coords, common_t, log_x)
         if equidistant_x:
             ax.set_xlim(-0.4, len(x_coords) - 0.6)
         if not log_y:
             ax.set_ylim(0, max(max(l_wc + r_wc, default=0) * LATENCY_Y_HEADROOM_FACTOR, 20))
         ax.grid(True, linestyle='--', alpha=0.4)
-        ax.legend(frameon=True, facecolor='white', framealpha=0.9, fontsize=12, loc='upper right')
+        ax.legend(frameon=True, facecolor='white', framealpha=0.9, fontsize=LEGEND_FONT_SIZE, loc='upper right')
 
         _add_rate_twinx(ax, x_coords, plot_act, plot_st, show_active, show_still)
 
         plot_title = f"{test_label}: Worst-Case Monitor Latency vs. Threshold — Local vs. Remote Auth"
         if not no_title:
-            fig.suptitle(plot_title, fontsize=16, fontweight='bold', y=1.01)
+            fig.suptitle(plot_title, fontsize=FIGURE_TITLE_FONT_SIZE, fontweight='bold', y=1.01)
         finalize_plot_layout(fig, aspect_1_1)
 
         stem = f"{test_name}_worstcase_latency_local_vs_remote"
