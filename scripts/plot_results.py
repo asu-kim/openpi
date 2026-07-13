@@ -113,6 +113,27 @@ def optimize_annotations(texts, ax=None):
     pass
 
 
+def apply_log_scales(ax, x_values: list, y_values: list,
+                     log_x: bool = False, log_y: bool = False):
+    """Apply base-10 log scales, retaining zero/negative data with symlog."""
+    for axis_name, enabled, values in (
+        ("x", log_x, x_values),
+        ("y", log_y, y_values),
+    ):
+        if not enabled:
+            continue
+
+        finite_values = [float(value) for value in values]
+        scale_setter = ax.set_xscale if axis_name == "x" else ax.set_yscale
+        if finite_values and all(value > 0 for value in finite_values):
+            scale_setter("log", base=10)
+            continue
+
+        positive_values = [value for value in finite_values if value > 0]
+        linthresh = min(positive_values) / 10 if positive_values else 1.0
+        scale_setter("symlog", base=10, linthresh=linthresh)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Test 1: Validity Period vs. Monitor Latency
 # ─────────────────────────────────────────────────────────────────────────────
@@ -236,7 +257,8 @@ def read_test1_csv(csv_path: Path) -> tuple[list, list, list]:
 def _plot_single_mode(validities: list, avg_latencies: list, wc_latencies: list,
                       output_dir: Path, test_name: str, auth_mode: str,
                       equidistant_x: bool = False,
-                      aspect_1_1: bool = False, no_title: bool = False):
+                      aspect_1_1: bool = False, no_title: bool = False,
+                      log_x: bool = False, log_y: bool = False):
     """Render the single-mode graph (avg latency + worst-case on twin axes) from CSV data."""
     try:
         color_avg = '#1f77b4'
@@ -256,6 +278,7 @@ def _plot_single_mode(validities: list, avg_latencies: list, wc_latencies: list,
         ax1.plot(x_coords, avg_latencies,
                  marker='o', markersize=8, linewidth=2.5, color=color_avg,
                  label='Avg Monitor Latency')
+        apply_log_scales(ax1, x_coords, avg_latencies, log_x=log_x, log_y=log_y)
         texts1 = []
         for i, val in enumerate(x_coords):
             texts1.append(annotate_point(ax1, f"{avg_latencies[i]:.2f} ms", (val, avg_latencies[i]),
@@ -265,7 +288,8 @@ def _plot_single_mode(validities: list, avg_latencies: list, wc_latencies: list,
         ax1.set_xlabel('Relative Validity Period (seconds)', fontsize=14, labelpad=10)
         ax1.set_ylabel('Avg Monitor Latency (ms)', fontsize=14, color=color_avg, labelpad=10)
         ax1.tick_params(axis='y', labelcolor=color_avg)
-        ax1.set_ylim(0, max(max(avg_latencies, default=0) * 1.4, 20))
+        if not log_y:
+            ax1.set_ylim(0, max(max(avg_latencies, default=0) * 1.4, 20))
         ax1.set_xticks(x_coords)
         ax1.set_xticklabels(x_labels, fontsize=13)
         if equidistant_x:
@@ -277,6 +301,7 @@ def _plot_single_mode(validities: list, avg_latencies: list, wc_latencies: list,
                  marker='s', markersize=8, linewidth=2.5,
                  linestyle='--', color=color_wc,
                  label='Worst-Case Monitor Latency')
+        apply_log_scales(ax2, x_coords, wc_latencies, log_x=log_x, log_y=log_y)
         texts2 = []
         for i, val in enumerate(x_coords):
             texts2.append(annotate_point(ax2, f"{wc_latencies[i]:.2f} ms", (val, wc_latencies[i]),
@@ -286,7 +311,8 @@ def _plot_single_mode(validities: list, avg_latencies: list, wc_latencies: list,
         ax2.set_ylabel('Worst-Case Monitor Latency (ms)', fontsize=14,
                        color=color_wc, labelpad=10)
         ax2.tick_params(axis='y', labelcolor=color_wc)
-        ax2.set_ylim(0, max(max(wc_latencies, default=0) * 1.4, 20))
+        if not log_y:
+            ax2.set_ylim(0, max(max(wc_latencies, default=0) * 1.4, 20))
 
         lines1, labels1 = ax1.get_legend_handles_labels()
         lines2, labels2 = ax2.get_legend_handles_labels()
@@ -317,7 +343,9 @@ def generate_plots_and_reports(validities: list, results: dict, worst_case_resul
                                 auth_mode: str = "local",
                                 equidistant_x: bool = False,
                                 aspect_1_1: bool = False,
-                                no_title: bool = False) -> Path:
+                                no_title: bool = False,
+                                log_x: bool = False,
+                                log_y: bool = False) -> Path:
     """
     Test 1 pipeline:
       1. Compute per-validity averages from raw run dicts.
@@ -370,7 +398,11 @@ def generate_plots_and_reports(validities: list, results: dict, worst_case_resul
 
     # Step 3 — render graph by reading back from CSV
     v, avg_lats, wc_lats = read_test1_csv(csv_path)
-    _plot_single_mode(v, avg_lats, wc_lats, output_dir, test_name, auth_mode, equidistant_x=equidistant_x, aspect_1_1=aspect_1_1, no_title=no_title)
+    _plot_single_mode(
+        v, avg_lats, wc_lats, output_dir, test_name, auth_mode,
+        equidistant_x=equidistant_x, aspect_1_1=aspect_1_1,
+        no_title=no_title, log_x=log_x, log_y=log_y
+    )
 
     return csv_path
 
@@ -379,7 +411,9 @@ def generate_comparative_plots(local_csv: Path, remote_csv: Path,
                                output_dir: Path, test_name: str = "test1",
                                equidistant_x: bool = False,
                                aspect_1_1: bool = False,
-                               no_title: bool = False):
+                               no_title: bool = False,
+                               log_x: bool = False,
+                               log_y: bool = False):
     """
     Generate two separate comparison plots for Test 1 by reading directly from
     two pre-existing validity_vs_latency.csv files (local and remote):
@@ -435,6 +469,7 @@ def generate_comparative_plots(local_csv: Path, remote_csv: Path,
                 color=color_local,  label='Local Auth — Avg Latency')
         ax.plot(x_coords, r_avg, marker='s', markersize=8, linewidth=2.5,
                 color=color_remote, label='Remote Auth — Avg Latency', linestyle='--')
+        apply_log_scales(ax, x_coords, l_avg + r_avg, log_x=log_x, log_y=log_y)
 
         texts = []
         for i, val in enumerate(x_coords):
@@ -450,7 +485,8 @@ def generate_comparative_plots(local_csv: Path, remote_csv: Path,
         ax.set_xticklabels(x_labels, fontsize=13)
         if equidistant_x:
             ax.set_xlim(-0.4, len(x_coords) - 0.6)
-        ax.set_ylim(0, max(max(l_avg + r_avg, default=0) * 1.4, 20))
+        if not log_y:
+            ax.set_ylim(0, max(max(l_avg + r_avg, default=0) * 1.4, 20))
         ax.grid(True, linestyle='--', alpha=0.4)
         ax.legend(frameon=True, facecolor='white', framealpha=0.9, fontsize=12, loc='upper right')
 
@@ -480,6 +516,7 @@ def generate_comparative_plots(local_csv: Path, remote_csv: Path,
                 color=color_local,  label='Local Auth — Worst-Case Latency')
         ax.plot(x_coords, r_wc, marker='s', markersize=8, linewidth=2.5,
                 color=color_remote, label='Remote Auth — Worst-Case Latency', linestyle='--')
+        apply_log_scales(ax, x_coords, l_wc + r_wc, log_x=log_x, log_y=log_y)
 
         texts = []
         for i, val in enumerate(x_coords):
@@ -495,7 +532,8 @@ def generate_comparative_plots(local_csv: Path, remote_csv: Path,
         ax.set_xticklabels(x_labels, fontsize=13)
         if equidistant_x:
             ax.set_xlim(-0.4, len(x_coords) - 0.6)
-        ax.set_ylim(0, max(max(l_wc + r_wc, default=0) * 1.4, 20))
+        if not log_y:
+            ax.set_ylim(0, max(max(l_wc + r_wc, default=0) * 1.4, 20))
         ax.grid(True, linestyle='--', alpha=0.4)
         ax.legend(frameon=True, facecolor='white', framealpha=0.9, fontsize=12, loc='upper right')
 
@@ -666,7 +704,9 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
                             show_active: bool = False, show_still: bool = False,
                             equidistant_x: bool = False,
                             aspect_1_1: bool = False,
-                            no_title: bool = False):
+                            no_title: bool = False,
+                            log_x: bool = False,
+                            log_y: bool = False):
     """Render two separate single-mode graphs for Test 2: Average Latency & Worst-Case Latency."""
     if not MATPLOTLIB_AVAILABLE:
         print("\n⚠️  Warning: matplotlib is not available.")
@@ -690,6 +730,7 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
             ax.set_box_aspect(1)
         ax.plot(x_coords, avg_latencies, marker='o', markersize=8, linewidth=2.5,
                 color=color_lat, label='Avg Monitor Latency')
+        apply_log_scales(ax, x_coords, avg_latencies, log_x=log_x, log_y=log_y)
         texts = []
         for i, x in enumerate(x_coords):
             texts.append(annotate_point(ax, f"{avg_latencies[i]:.2f} ms", (x, avg_latencies[i]),
@@ -702,7 +743,8 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
         ax.set_xticklabels(x_labels, fontsize=13)
         if equidistant_x:
             ax.set_xlim(-0.4, len(x_coords) - 0.6)
-        ax.set_ylim(0, max(max(avg_latencies, default=0) * 1.4, 20))
+        if not log_y:
+            ax.set_ylim(0, max(max(avg_latencies, default=0) * 1.4, 20))
         ax.grid(True, linestyle='--', alpha=0.4)
         ax.legend(frameon=True, facecolor='white', framealpha=0.9, fontsize=12, loc='upper right')
 
@@ -730,6 +772,7 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
             ax.set_box_aspect(1)
         ax.plot(x_coords, wc_latencies, marker='s', markersize=8, linewidth=2.5,
                 linestyle='--', color=color_wc, label='Worst-Case Monitor Latency')
+        apply_log_scales(ax, x_coords, wc_latencies, log_x=log_x, log_y=log_y)
         texts = []
         for i, x in enumerate(x_coords):
             texts.append(annotate_point(ax, f"{wc_latencies[i]:.2f} ms", (x, wc_latencies[i]),
@@ -742,7 +785,8 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
         ax.set_xticklabels(x_labels, fontsize=13)
         if equidistant_x:
             ax.set_xlim(-0.4, len(x_coords) - 0.6)
-        ax.set_ylim(0, max(max(wc_latencies, default=0) * 1.4, 20))
+        if not log_y:
+            ax.set_ylim(0, max(max(wc_latencies, default=0) * 1.4, 20))
         ax.grid(True, linestyle='--', alpha=0.4)
         ax.legend(frameon=True, facecolor='white', framealpha=0.9, fontsize=12, loc='upper right')
 
@@ -768,7 +812,9 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
                                      show_active: bool = False, show_still: bool = False,
                                      equidistant_x: bool = False,
                                      aspect_1_1: bool = False,
-                                     no_title: bool = False):
+                                     no_title: bool = False,
+                                     log_x: bool = False,
+                                     log_y: bool = False):
     """Generate two separate comparative plots for Test 2 from threshold_vs_latency.csv files."""
     if not MATPLOTLIB_AVAILABLE:
         print("\n⚠️  Warning: matplotlib is not available — comparative plots skipped.")
@@ -778,22 +824,24 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
     local_t, local_avg, local_wc, l_act_all, l_st_all = read_test2_csv(local_csv)
     remote_t, remote_avg, remote_wc, r_act_all, r_st_all = read_test2_csv(remote_csv)
 
-    local_map_avg = {round(t, 6): avg for t, avg in zip(local_t, local_avg)}
-    local_map_wc  = {round(t, 6): wc  for t, wc  in zip(local_t, local_wc)}
-    local_map_act = {round(t, 6): act for t, act in zip(local_t, l_act_all)}
-    local_map_st  = {round(t, 6): st  for t, st  in zip(local_t, l_st_all)}
-    remote_map_avg = {round(t, 6): avg for t, avg in zip(remote_t, remote_avg)}
-    remote_map_wc  = {round(t, 6): wc  for t, wc  in zip(remote_t, remote_wc)}
+    local_map_avg = {round(t, 4): avg for t, avg in zip(local_t, local_avg)}
+    local_map_wc  = {round(t, 4): wc  for t, wc  in zip(local_t, local_wc)}
+    local_map_act = {round(t, 4): act for t, act in zip(local_t, l_act_all)}
+    local_map_st  = {round(t, 4): st  for t, st  in zip(local_t, l_st_all)}
+    remote_map_avg = {round(t, 4): avg for t, avg in zip(remote_t, remote_avg)}
+    remote_map_wc  = {round(t, 4): wc  for t, wc  in zip(remote_t, remote_wc)}
 
     common_t = sorted(set(local_map_avg.keys()) & set(remote_map_avg.keys()))
     if not common_t:
         if len(local_t) == len(remote_t):
-            common_t = sorted([round(t, 6) for t in local_t])
-            remote_map_avg = {round(lt, 6): ra for lt, ra in zip(sorted(local_t), remote_avg)}
-            remote_map_wc  = {round(lt, 6): rw for lt, rw in zip(sorted(local_t), remote_wc)}
+            common_t = sorted([round(t, 4) for t in local_t])
+            remote_map_avg = {round(lt, 4): ra for lt, ra in zip(sorted(local_t), remote_avg)}
+            remote_map_wc  = {round(lt, 4): rw for lt, rw in zip(sorted(local_t), remote_wc)}
         else:
             print("⚠️  No common thresholds between local and remote CSVs.")
             return
+
+    print(f"📐 Test 2 Comparative Plot — Equidistant X-Axis mode: {'ENABLED (1:1 categorical spacing)' if equidistant_x else 'DISABLED (numerical spacing)'}")
 
     l_avg = [local_map_avg[t]  for t in common_t]
     l_wc  = [local_map_wc[t]   for t in common_t]
@@ -819,6 +867,7 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
                 color='#1f77b4', label='Local Auth — Avg Latency')
         ax.plot(x_coords, r_avg, marker='s', markersize=8, linewidth=2.5,
                 color='#d62728', label='Remote Auth — Avg Latency', linestyle='--')
+        apply_log_scales(ax, x_coords, l_avg + r_avg, log_x=log_x, log_y=log_y)
 
         texts = []
         for i, x in enumerate(x_coords):
@@ -834,7 +883,8 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
         ax.set_xticklabels(x_labels, fontsize=13)
         if equidistant_x:
             ax.set_xlim(-0.4, len(x_coords) - 0.6)
-        ax.set_ylim(0, max(max(l_avg + r_avg, default=0) * 1.4, 20))
+        if not log_y:
+            ax.set_ylim(0, max(max(l_avg + r_avg, default=0) * 1.4, 20))
         ax.grid(True, linestyle='--', alpha=0.4)
         ax.legend(frameon=True, facecolor='white', framealpha=0.9, fontsize=12, loc='upper right')
 
@@ -862,6 +912,7 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
                 color='#2ca02c', label='Local Auth — Worst-Case Latency')
         ax.plot(x_coords, r_wc, marker='s', markersize=8, linewidth=2.5,
                 color='#9467bd', label='Remote Auth — Worst-Case Latency', linestyle='--')
+        apply_log_scales(ax, x_coords, l_wc + r_wc, log_x=log_x, log_y=log_y)
 
         texts = []
         for i, x in enumerate(x_coords):
@@ -877,7 +928,8 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
         ax.set_xticklabels(x_labels, fontsize=13)
         if equidistant_x:
             ax.set_xlim(-0.4, len(x_coords) - 0.6)
-        ax.set_ylim(0, max(max(l_wc + r_wc, default=0) * 1.4, 20))
+        if not log_y:
+            ax.set_ylim(0, max(max(l_wc + r_wc, default=0) * 1.4, 20))
         ax.grid(True, linestyle='--', alpha=0.4)
         ax.legend(frameon=True, facecolor='white', framealpha=0.9, fontsize=12, loc='upper right')
 
@@ -904,7 +956,9 @@ def generate_test2_plots_and_reports(thresholds: list, results: dict, worst_case
                                      show_active: bool = False, show_still: bool = False,
                                      equidistant_x: bool = False,
                                      aspect_1_1: bool = False,
-                                     no_title: bool = False) -> Path:
+                                     no_title: bool = False,
+                                     log_x: bool = False,
+                                     log_y: bool = False) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     summary_rows = []
@@ -965,7 +1019,8 @@ def generate_test2_plots_and_reports(thresholds: list, results: dict, worst_case
     # Render single-mode graphs from CSV
     _plot_test2_single_mode(thresholds, avg_latencies, wc_latencies, active_rates, still_rates,
                             output_dir, test_name, auth_mode, show_active=show_active, show_still=show_still,
-                            equidistant_x=equidistant_x, aspect_1_1=aspect_1_1, no_title=no_title)
+                            equidistant_x=equidistant_x, aspect_1_1=aspect_1_1,
+                            no_title=no_title, log_x=log_x, log_y=log_y)
 
     return csv_path
 
@@ -1017,8 +1072,16 @@ def main():
         help="Include the average %% Still Rate (Bypass Rate) on a secondary y-axis for Test 2 graphs."
     )
     parser.add_argument(
-        "--equidistant-x", "--equidistant", action="store_true", dest="equidistant_x",
+        "--equidistant-x", action="store_true", dest="equidistant_x",
         help="Plot Test 2 x-axis points at equidistant categorical intervals rather than continuous numerical positions on the number line."
+    )
+    parser.add_argument(
+        "--log-x", action="store_true", dest="log_x",
+        help="Use base-10 logarithmic spacing on the x-axis. Uses symmetric-log around zero when needed."
+    )
+    parser.add_argument(
+        "--log-y", action="store_true", dest="log_y",
+        help="Use base-10 logarithmic spacing on the latency y-axis. Uses symmetric-log around zero when needed."
     )
     parser.add_argument(
         "--aspect-1-1", "--square", "--aspect-ratio-1-1", action="store_true", dest="aspect_1_1",
@@ -1029,6 +1092,9 @@ def main():
         help="Omit graph titles (suptitle) from rendered plots."
     )
     args = parser.parse_args()
+
+    if args.equidistant_x and args.log_x:
+        parser.error("--equidistant-x and --log-x cannot be used together")
 
     reports_dir = Path(args.reports_dir).resolve()
     output_dir  = Path(args.output_dir).resolve() if args.output_dir else reports_dir
@@ -1070,7 +1136,7 @@ def main():
             output_dir, test_name=test_name, auth_mode=auth_mode,
             show_active=args.show_active_rate, show_still=args.show_still_rate,
             equidistant_x=args.equidistant_x, aspect_1_1=args.aspect_1_1,
-            no_title=args.no_title
+            no_title=args.no_title, log_x=args.log_x, log_y=args.log_y
         )
 
         compare_csv = Path(args.compare_csv).resolve() if args.compare_csv else None
@@ -1089,7 +1155,7 @@ def main():
                     local_csv, remote_csv, output_dir, test_name=test_name,
                     show_active=args.show_active_rate, show_still=args.show_still_rate,
                     equidistant_x=args.equidistant_x, aspect_1_1=args.aspect_1_1,
-                    no_title=args.no_title
+                    no_title=args.no_title, log_x=args.log_x, log_y=args.log_y
                 )
     else:
         # ── Test 1: validity vs. monitor latency ──────────────────────────────
@@ -1118,7 +1184,8 @@ def main():
         primary_csv = generate_plots_and_reports(
             validities, results, worst_case_results,
             output_dir, test_name=test_name, auth_mode=auth_mode,
-            equidistant_x=args.equidistant_x, aspect_1_1=args.aspect_1_1, no_title=args.no_title
+            equidistant_x=args.equidistant_x, aspect_1_1=args.aspect_1_1,
+            no_title=args.no_title, log_x=args.log_x, log_y=args.log_y
         )
 
         # Step 3: if a compare CSV is provided, also generate comparative plots
@@ -1143,7 +1210,8 @@ def main():
                 print(f"   Remote CSV: {remote_csv}")
                 generate_comparative_plots(
                     local_csv, remote_csv, output_dir, test_name=test_name,
-                    equidistant_x=args.equidistant_x, aspect_1_1=args.aspect_1_1, no_title=args.no_title
+                    equidistant_x=args.equidistant_x, aspect_1_1=args.aspect_1_1,
+                    no_title=args.no_title, log_x=args.log_x, log_y=args.log_y
                 )
     print("\n✅ Done!\n")
 
