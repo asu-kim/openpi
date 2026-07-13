@@ -155,6 +155,35 @@ def finalize_plot_layout(fig, aspect_1_1: bool = False):
         fig.tight_layout()
 
 
+def save_plot(fig, output_path: Path, aspect_1_1: bool = False):
+    """Save plots with an exact square canvas when 1:1 output is requested."""
+    if aspect_1_1:
+        fig.savefig(output_path)
+    else:
+        fig.savefig(output_path, bbox_inches='tight', pad_inches=0.25)
+
+
+def print_plot_options(test_name: str, output_dir: Path, options: dict,
+                       show_active: bool = False, show_still: bool = False):
+    x_scale = "equidistant" if options["equidistant_x"] else (
+        "logarithmic" if options["log_x"] else "linear"
+    )
+    y_scale = "logarithmic" if options["log_y"] else "linear"
+    print(f"📐 {test_name.upper()} graph configuration for this run:")
+    print(f"   Canvas : {'1:1 square' if options['aspect_1_1'] else 'standard 11:6'}")
+    print(f"   X-axis : {x_scale}")
+    print(f"   Y-axis : {y_scale}")
+    print(f"   Title  : {'hidden' if options['no_title'] else 'shown'}")
+    if test_name == "test2":
+        overlays = []
+        if show_active:
+            overlays.append("active rate")
+        if show_still:
+            overlays.append("still rate")
+        print(f"   Rates  : {', '.join(overlays) if overlays else 'hidden'}")
+    print(f"   Output : {output_dir}")
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Test 1: Validity Period vs. Monitor Latency
 # ─────────────────────────────────────────────────────────────────────────────
@@ -347,8 +376,8 @@ def _plot_single_mode(validities: list, avg_latencies: list, wc_latencies: list,
             fig.suptitle(plot_title, fontsize=16, fontweight='bold', y=1.01)
         finalize_plot_layout(fig, aspect_1_1)
 
-        fig.savefig(output_dir / f"{file_stem}.png", bbox_inches='tight', pad_inches=0.25)
-        fig.savefig(output_dir / f"{file_stem}.pdf", bbox_inches='tight', pad_inches=0.25)
+        save_plot(fig, output_dir / f"{file_stem}.png", aspect_1_1)
+        save_plot(fig, output_dir / f"{file_stem}.pdf", aspect_1_1)
         plt.close(fig)
         print(f"📈 Graph (PNG) saved to: {output_dir / file_stem}.png")
         print(f"📈 Graph (PDF) saved to: {output_dir / file_stem}.pdf")
@@ -511,8 +540,8 @@ def generate_comparative_plots(local_csv: Path, remote_csv: Path,
         finalize_plot_layout(fig, aspect_1_1)
 
         stem = f"{test_name}_avg_latency_local_vs_remote"
-        fig.savefig(output_dir / f"{stem}.png", bbox_inches='tight', pad_inches=0.25)
-        fig.savefig(output_dir / f"{stem}.pdf", bbox_inches='tight', pad_inches=0.25)
+        save_plot(fig, output_dir / f"{stem}.png", aspect_1_1)
+        save_plot(fig, output_dir / f"{stem}.pdf", aspect_1_1)
         plt.close(fig)
         print(f"📈 Comparative avg-latency graph saved to: {output_dir}/{stem}.png / .pdf")
     except Exception as e:
@@ -558,8 +587,8 @@ def generate_comparative_plots(local_csv: Path, remote_csv: Path,
         finalize_plot_layout(fig, aspect_1_1)
 
         stem = f"{test_name}_worstcase_latency_local_vs_remote"
-        fig.savefig(output_dir / f"{stem}.png", bbox_inches='tight', pad_inches=0.25)
-        fig.savefig(output_dir / f"{stem}.pdf", bbox_inches='tight', pad_inches=0.25)
+        save_plot(fig, output_dir / f"{stem}.png", aspect_1_1)
+        save_plot(fig, output_dir / f"{stem}.pdf", aspect_1_1)
         plt.close(fig)
         print(f"📈 Comparative worst-case graph saved to: {output_dir}/{stem}.png / .pdf")
     except Exception as e:
@@ -768,8 +797,8 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
         finalize_plot_layout(fig, aspect_1_1)
 
         file_stem = f"{test_name}_{auth_mode}_threshold_vs_avg_latency"
-        fig.savefig(output_dir / f"{file_stem}.png", bbox_inches='tight', pad_inches=0.25)
-        fig.savefig(output_dir / f"{file_stem}.pdf", bbox_inches='tight', pad_inches=0.25)
+        save_plot(fig, output_dir / f"{file_stem}.png", aspect_1_1)
+        save_plot(fig, output_dir / f"{file_stem}.pdf", aspect_1_1)
         plt.close(fig)
         print(f"📈 Graph (PNG) saved to: {output_dir / file_stem}.png")
         print(f"📈 Graph (PDF) saved to: {output_dir / file_stem}.pdf")
@@ -810,8 +839,8 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
         finalize_plot_layout(fig, aspect_1_1)
 
         file_stem = f"{test_name}_{auth_mode}_threshold_vs_worstcase_latency"
-        fig.savefig(output_dir / f"{file_stem}.png", bbox_inches='tight', pad_inches=0.25)
-        fig.savefig(output_dir / f"{file_stem}.pdf", bbox_inches='tight', pad_inches=0.25)
+        save_plot(fig, output_dir / f"{file_stem}.png", aspect_1_1)
+        save_plot(fig, output_dir / f"{file_stem}.pdf", aspect_1_1)
         plt.close(fig)
         print(f"📈 Graph (PNG) saved to: {output_dir / file_stem}.png")
         print(f"📈 Graph (PDF) saved to: {output_dir / file_stem}.pdf")
@@ -852,8 +881,6 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
         else:
             print("⚠️  No common thresholds between local and remote CSVs.")
             return
-
-    print(f"📐 Test 2 Comparative Plot — Equidistant X-Axis mode: {'ENABLED (1:1 categorical spacing)' if equidistant_x else 'DISABLED (numerical spacing)'}")
 
     l_avg = [local_map_avg[t]  for t in common_t]
     l_wc  = [local_map_wc[t]   for t in common_t]
@@ -905,8 +932,8 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
         finalize_plot_layout(fig, aspect_1_1)
 
         stem = f"{test_name}_avg_latency_local_vs_remote"
-        fig.savefig(output_dir / f"{stem}.png", bbox_inches='tight', pad_inches=0.25)
-        fig.savefig(output_dir / f"{stem}.pdf", bbox_inches='tight', pad_inches=0.25)
+        save_plot(fig, output_dir / f"{stem}.png", aspect_1_1)
+        save_plot(fig, output_dir / f"{stem}.pdf", aspect_1_1)
         plt.close(fig)
         print(f"📈 Comparative avg-latency graph saved to: {output_dir}/{stem}.png / .pdf")
     except Exception as e:
@@ -950,8 +977,8 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
         finalize_plot_layout(fig, aspect_1_1)
 
         stem = f"{test_name}_worstcase_latency_local_vs_remote"
-        fig.savefig(output_dir / f"{stem}.png", bbox_inches='tight', pad_inches=0.25)
-        fig.savefig(output_dir / f"{stem}.pdf", bbox_inches='tight', pad_inches=0.25)
+        save_plot(fig, output_dir / f"{stem}.png", aspect_1_1)
+        save_plot(fig, output_dir / f"{stem}.pdf", aspect_1_1)
         plt.close(fig)
         print(f"📈 Comparative worst-case graph saved to: {output_dir}/{stem}.png / .pdf")
     except Exception as e:
@@ -1127,6 +1154,20 @@ def main():
     is_test2 = (test_name.lower() == "test2") or list(reports_dir.glob("thresh_*_run_*.txt"))
     if is_test2:
         test_name = "test2"
+
+    plot_options = {
+        "equidistant_x": args.equidistant_x,
+        "aspect_1_1": args.aspect_1_1,
+        "no_title": args.no_title,
+        "log_x": args.log_x,
+        "log_y": args.log_y,
+    }
+    print_plot_options(
+        test_name, output_dir, plot_options,
+        show_active=args.show_active_rate, show_still=args.show_still_rate
+    )
+
+    if is_test2:
         thresholds, runs = discover_test2_reports(reports_dir)
         print("=" * 80)
         print("AGGREGATING TEST 2 REPORTS & GENERATING GRAPH (Threshold vs Bypass & Latency)")
@@ -1144,8 +1185,7 @@ def main():
             thresholds, results, wc_results, active_results, still_results,
             output_dir, test_name=test_name, auth_mode=auth_mode,
             show_active=args.show_active_rate, show_still=args.show_still_rate,
-            equidistant_x=args.equidistant_x, aspect_1_1=args.aspect_1_1,
-            no_title=args.no_title, log_x=args.log_x, log_y=args.log_y
+            **plot_options
         )
 
         compare_csv = Path(args.compare_csv).resolve() if args.compare_csv else None
@@ -1163,8 +1203,7 @@ def main():
                 generate_test2_comparative_plots(
                     local_csv, remote_csv, output_dir, test_name=test_name,
                     show_active=args.show_active_rate, show_still=args.show_still_rate,
-                    equidistant_x=args.equidistant_x, aspect_1_1=args.aspect_1_1,
-                    no_title=args.no_title, log_x=args.log_x, log_y=args.log_y
+                    **plot_options
                 )
     else:
         # ── Test 1: validity vs. monitor latency ──────────────────────────────
@@ -1193,8 +1232,7 @@ def main():
         primary_csv = generate_plots_and_reports(
             validities, results, worst_case_results,
             output_dir, test_name=test_name, auth_mode=auth_mode,
-            equidistant_x=args.equidistant_x, aspect_1_1=args.aspect_1_1,
-            no_title=args.no_title, log_x=args.log_x, log_y=args.log_y
+            **plot_options
         )
 
         # Step 3: if a compare CSV is provided, also generate comparative plots
@@ -1219,8 +1257,7 @@ def main():
                 print(f"   Remote CSV: {remote_csv}")
                 generate_comparative_plots(
                     local_csv, remote_csv, output_dir, test_name=test_name,
-                    equidistant_x=args.equidistant_x, aspect_1_1=args.aspect_1_1,
-                    no_title=args.no_title, log_x=args.log_x, log_y=args.log_y
+                    **plot_options
                 )
     print("\n✅ Done!\n")
 
