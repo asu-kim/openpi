@@ -44,6 +44,7 @@ Y_TICK_LABEL_FONT_SIZE = 13
 LEGEND_FONT_SIZE = 12
 FIGURE_TITLE_FONT_SIZE = 16
 DATA_LABEL_FONT_SIZE = 16
+DATA_LABEL_BOUNDARY_PADDING_POINTS = 4
 
 # Ensure MPLCONFIGDIR is set to a writable temporary directory to avoid permission errors on restricted/shared workstations
 if "MPLCONFIGDIR" not in os.environ:
@@ -160,11 +161,55 @@ def annotate_point(ax, text, xy, xytext=(0, 12), color='black',
     )
     if MATPLOTLIB_AVAILABLE:
         ann.set_path_effects([path_effects.withStroke(linewidth=3, foreground='white')])
+    ann.set_gid("data-label")
     return ann
 
 
 def optimize_annotations(texts, ax=None):
     pass
+
+
+def keep_data_labels_inside_axes(fig):
+    """Shift data labels inward when their rendered bounds cross an axes box."""
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    padding_px = DATA_LABEL_BOUNDARY_PADDING_POINTS * fig.dpi / 72
+    adjusted = False
+
+    for ax in fig.axes:
+        axes_box = ax.get_window_extent(renderer)
+        left = axes_box.x0 + padding_px
+        right = axes_box.x1 - padding_px
+        bottom = axes_box.y0 + padding_px
+        top = axes_box.y1 - padding_px
+
+        for label in ax.texts:
+            if label.get_gid() != "data-label":
+                continue
+
+            label_box = label.get_window_extent(renderer)
+            dx_px = 0
+            dy_px = 0
+            if label_box.x0 < left:
+                dx_px = left - label_box.x0
+            elif label_box.x1 > right:
+                dx_px = right - label_box.x1
+            if label_box.y0 < bottom:
+                dy_px = bottom - label_box.y0
+            elif label_box.y1 > top:
+                dy_px = top - label_box.y1
+
+            if dx_px or dy_px:
+                offset_x, offset_y = label.get_position()
+                pixels_to_points = 72 / fig.dpi
+                label.set_position((
+                    offset_x + dx_px * pixels_to_points,
+                    offset_y + dy_px * pixels_to_points,
+                ))
+                adjusted = True
+
+    if adjusted:
+        fig.canvas.draw()
 
 
 LOG_X_ZERO_FLOOR = 0.001
@@ -238,6 +283,7 @@ def finalize_plot_layout(fig, aspect_1_1: bool = False):
         fig.tight_layout(rect=(0, 0.08, 1, 1))
     else:
         fig.tight_layout()
+    keep_data_labels_inside_axes(fig)
 
 
 def save_plot(fig, output_path: Path, aspect_1_1: bool = False):
