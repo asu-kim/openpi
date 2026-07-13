@@ -158,7 +158,6 @@ def optimize_annotations(texts, ax=None):
 
 LOG_X_ZERO_FLOOR = 0.001
 LATENCY_Y_HEADROOM_FACTOR = 1.05
-X_AXIS_MARGIN = 0.07
 
 
 def get_x_coordinates(values: list, equidistant_x: bool = False,
@@ -182,17 +181,6 @@ def set_threshold_x_ticks(ax, x_coords: list, thresholds: list,
         rotation=20 if log_x else 0,
         ha="right" if log_x else "center",
     )
-
-
-def apply_x_axis_padding(ax, x_coords: list,
-                         equidistant_x: bool = False):
-    """Keep point annotations clear of the left and right plot borders."""
-    if not x_coords:
-        return
-    if equidistant_x:
-        ax.set_xlim(-0.6, len(x_coords) - 0.4)
-    else:
-        ax.margins(x=X_AXIS_MARGIN)
 
 
 def apply_log_scales(ax, x_values: list, y_values: list,
@@ -408,7 +396,8 @@ def _plot_single_mode(validities: list, avg_latencies: list, wc_latencies: list,
             ax1.set_ylim(0, max(max(avg_latencies, default=0) * LATENCY_Y_HEADROOM_FACTOR, 20))
         ax1.set_xticks(x_coords)
         ax1.set_xticklabels(x_labels, fontsize=13)
-        apply_x_axis_padding(ax1, x_coords, equidistant_x)
+        if equidistant_x:
+            ax1.set_xlim(-0.4, len(x_coords) - 0.6)
         ax1.grid(True, linestyle='--', alpha=0.4)
 
         ax2 = ax1.twinx()
@@ -420,7 +409,7 @@ def _plot_single_mode(validities: list, avg_latencies: list, wc_latencies: list,
         texts2 = []
         for i, val in enumerate(x_coords):
             texts2.append(annotate_point(ax2, f"{wc_latencies[i]:.2f} ms", (val, wc_latencies[i]),
-                                         xytext=(0, -18), color=color_wc, fontsize=11))
+                                         xytext=(0, 12), color=color_wc, fontsize=11))
         optimize_annotations(texts2, ax=ax2)
 
         ax2.set_ylabel('Worst-Case Monitor Latency (ms)', fontsize=14,
@@ -586,16 +575,17 @@ def generate_comparative_plots(local_csv: Path, remote_csv: Path,
         texts = []
         for i, val in enumerate(x_coords):
             texts.append(annotate_point(ax, f"{l_avg[i]:.2f}", (val, l_avg[i]),
-                                        xytext=(-18, 8), color=color_local, fontsize=11))
+                                        xytext=(0, 12), color=color_local, fontsize=11))
             texts.append(annotate_point(ax, f"{r_avg[i]:.2f}", (val, r_avg[i]),
-                                        xytext=(18, 8), color=color_remote, fontsize=11))
+                                        xytext=(0, 12), color=color_remote, fontsize=11))
         optimize_annotations(texts, ax=ax)
 
         ax.set_xlabel('Relative Validity Period (seconds)', fontsize=14, labelpad=10)
         ax.set_ylabel('Average Monitor Latency (ms)', fontsize=14, labelpad=10)
         ax.set_xticks(x_coords)
         ax.set_xticklabels(x_labels, fontsize=13)
-        apply_x_axis_padding(ax, x_coords, equidistant_x)
+        if equidistant_x:
+            ax.set_xlim(-0.4, len(x_coords) - 0.6)
         if not log_y:
             ax.set_ylim(0, max(max(l_avg + r_avg, default=0) * LATENCY_Y_HEADROOM_FACTOR, 20))
         ax.grid(True, linestyle='--', alpha=0.4)
@@ -632,16 +622,17 @@ def generate_comparative_plots(local_csv: Path, remote_csv: Path,
         texts = []
         for i, val in enumerate(x_coords):
             texts.append(annotate_point(ax, f"{l_wc[i]:.2f}", (val, l_wc[i]),
-                                        xytext=(-18, 8), color=color_local, fontsize=11))
+                                        xytext=(0, 12), color=color_local, fontsize=11))
             texts.append(annotate_point(ax, f"{r_wc[i]:.2f}", (val, r_wc[i]),
-                                        xytext=(18, 8), color=color_remote, fontsize=11))
+                                        xytext=(0, 12), color=color_remote, fontsize=11))
         optimize_annotations(texts, ax=ax)
 
         ax.set_xlabel('Relative Validity Period (seconds)', fontsize=14, labelpad=10)
         ax.set_ylabel('Worst-Case Monitor Latency (ms)', fontsize=14, labelpad=10)
         ax.set_xticks(x_coords)
         ax.set_xticklabels(x_labels, fontsize=13)
-        apply_x_axis_padding(ax, x_coords, equidistant_x)
+        if equidistant_x:
+            ax.set_xlim(-0.4, len(x_coords) - 0.6)
         if not log_y:
             ax.set_ylim(0, max(max(l_wc + r_wc, default=0) * LATENCY_Y_HEADROOM_FACTOR, 20))
         ax.grid(True, linestyle='--', alpha=0.4)
@@ -790,18 +781,16 @@ def _add_rate_twinx(ax, x_coords, active_rates, still_rates, show_active: bool, 
         lines.append(l1)
         labels.append('% Active Rate')
         for i, x in enumerate(x_coords):
-            y_offset = 12 if active_rates[i] <= 5 else -14
             texts.append(annotate_point(ax2, f"{active_rates[i]:.1f}%", (x, active_rates[i]),
-                                        xytext=(0, y_offset), color='#ff7f0e', fontsize=10.5))
+                                        xytext=(0, 12), color='#ff7f0e', fontsize=10.5))
     if show_still and still_rates:
         l2, = ax2.plot(x_coords, still_rates, marker='v', markersize=7, linewidth=2,
                        linestyle=':', color='#2ca02c', label='% Still Rate (Bypass)')
         lines.append(l2)
         labels.append('% Still Rate (Bypass)')
         for i, x in enumerate(x_coords):
-            y_offset = -14 if still_rates[i] >= 95 else 14
             texts.append(annotate_point(ax2, f"{still_rates[i]:.1f}%", (x, still_rates[i]),
-                                        xytext=(0, y_offset), color='#2ca02c', fontsize=10.5))
+                                        xytext=(0, 12), color='#2ca02c', fontsize=10.5))
     optimize_annotations(texts, ax=ax2)
 
     ax2.set_ylabel('Percentage Rate (%)', fontsize=14, color='#555555', labelpad=10)
@@ -847,7 +836,8 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
         ax.set_xlabel('Motion Threshold Value (τ)', fontsize=14, labelpad=10)
         ax.set_ylabel('Average Monitor Latency (ms)', fontsize=14, color=color_lat, labelpad=10)
         set_threshold_x_ticks(ax, x_coords, thresholds, log_x)
-        apply_x_axis_padding(ax, x_coords, equidistant_x)
+        if equidistant_x:
+            ax.set_xlim(-0.4, len(x_coords) - 0.6)
         if not log_y:
             ax.set_ylim(0, max(max(avg_latencies, default=0) * LATENCY_Y_HEADROOM_FACTOR, 20))
         ax.grid(True, linestyle='--', alpha=0.4)
@@ -887,7 +877,8 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
         ax.set_xlabel('Motion Threshold Value (τ)', fontsize=14, labelpad=10)
         ax.set_ylabel('Worst-Case Monitor Latency (ms)', fontsize=14, color=color_wc, labelpad=10)
         set_threshold_x_ticks(ax, x_coords, thresholds, log_x)
-        apply_x_axis_padding(ax, x_coords, equidistant_x)
+        if equidistant_x:
+            ax.set_xlim(-0.4, len(x_coords) - 0.6)
         if not log_y:
             ax.set_ylim(0, max(max(wc_latencies, default=0) * LATENCY_Y_HEADROOM_FACTOR, 20))
         ax.grid(True, linestyle='--', alpha=0.4)
@@ -991,15 +982,16 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
         texts = []
         for i, x in enumerate(x_coords):
             texts.append(annotate_point(ax, f"{l_avg[i]:.2f}", (x, l_avg[i]),
-                                        xytext=(-18, 8), color='#1f77b4', fontsize=11))
+                                        xytext=(0, 12), color='#1f77b4', fontsize=11))
             texts.append(annotate_point(ax, f"{r_avg[i]:.2f}", (x, r_avg[i]),
-                                        xytext=(18, 8), color='#d62728', fontsize=11))
+                                        xytext=(0, 12), color='#d62728', fontsize=11))
         optimize_annotations(texts, ax=ax)
 
         ax.set_xlabel('Motion Threshold Value (τ)', fontsize=14, labelpad=10)
         ax.set_ylabel('Average Monitor Latency (ms)', fontsize=14, labelpad=10)
         set_threshold_x_ticks(ax, x_coords, common_t, log_x)
-        apply_x_axis_padding(ax, x_coords, equidistant_x)
+        if equidistant_x:
+            ax.set_xlim(-0.4, len(x_coords) - 0.6)
         if not log_y:
             ax.set_ylim(0, max(max(l_avg + r_avg, default=0) * LATENCY_Y_HEADROOM_FACTOR, 20))
         ax.grid(True, linestyle='--', alpha=0.4)
@@ -1034,15 +1026,16 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
         texts = []
         for i, x in enumerate(x_coords):
             texts.append(annotate_point(ax, f"{l_wc[i]:.2f}", (x, l_wc[i]),
-                                        xytext=(-18, 8), color='#2ca02c', fontsize=11))
+                                        xytext=(0, 12), color='#2ca02c', fontsize=11))
             texts.append(annotate_point(ax, f"{r_wc[i]:.2f}", (x, r_wc[i]),
-                                        xytext=(18, 8), color='#9467bd', fontsize=11))
+                                        xytext=(0, 12), color='#9467bd', fontsize=11))
         optimize_annotations(texts, ax=ax)
 
         ax.set_xlabel('Motion Threshold Value (τ)', fontsize=14, labelpad=10)
         ax.set_ylabel('Worst-Case Monitor Latency (ms)', fontsize=14, labelpad=10)
         set_threshold_x_ticks(ax, x_coords, common_t, log_x)
-        apply_x_axis_padding(ax, x_coords, equidistant_x)
+        if equidistant_x:
+            ax.set_xlim(-0.4, len(x_coords) - 0.6)
         if not log_y:
             ax.set_ylim(0, max(max(l_wc + r_wc, default=0) * LATENCY_Y_HEADROOM_FACTOR, 20))
         ax.grid(True, linestyle='--', alpha=0.4)
