@@ -158,6 +158,23 @@ def optimize_annotations(texts, ax=None):
 
 LOG_X_ZERO_FLOOR = 0.001
 LATENCY_Y_HEADROOM_FACTOR = 1.05
+COMPARISON_LABEL_OVERLAP_FRACTION = 0.04
+
+
+def get_comparison_label_offsets(first_value: float, second_value: float,
+                                 all_values: list) -> tuple[int, int]:
+    """Vertically stagger centered labels only when two series nearly overlap."""
+    if not all_values:
+        return 12, 12
+
+    value_span = max(all_values) - min(all_values)
+    overlap_threshold = value_span * COMPARISON_LABEL_OVERLAP_FRACTION
+    if value_span > 0 and abs(first_value - second_value) > overlap_threshold:
+        return 12, 12
+
+    if first_value >= second_value:
+        return 30, 12
+    return 12, 30
 
 
 def get_x_coordinates(values: list, equidistant_x: bool = False,
@@ -981,10 +998,13 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
 
         texts = []
         for i, x in enumerate(x_coords):
+            local_offset, remote_offset = get_comparison_label_offsets(
+                l_avg[i], r_avg[i], l_avg + r_avg
+            )
             texts.append(annotate_point(ax, f"{l_avg[i]:.2f}", (x, l_avg[i]),
-                                        xytext=(0, 12), color='#1f77b4', fontsize=11))
+                                        xytext=(0, local_offset), color='#1f77b4', fontsize=11))
             texts.append(annotate_point(ax, f"{r_avg[i]:.2f}", (x, r_avg[i]),
-                                        xytext=(0, 12), color='#d62728', fontsize=11))
+                                        xytext=(0, remote_offset), color='#d62728', fontsize=11))
         optimize_annotations(texts, ax=ax)
 
         ax.set_xlabel('Motion Threshold Value (τ)', fontsize=14, labelpad=10)
@@ -1025,10 +1045,13 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
 
         texts = []
         for i, x in enumerate(x_coords):
+            local_offset, remote_offset = get_comparison_label_offsets(
+                l_wc[i], r_wc[i], l_wc + r_wc
+            )
             texts.append(annotate_point(ax, f"{l_wc[i]:.2f}", (x, l_wc[i]),
-                                        xytext=(0, 12), color='#2ca02c', fontsize=11))
+                                        xytext=(0, local_offset), color='#2ca02c', fontsize=11))
             texts.append(annotate_point(ax, f"{r_wc[i]:.2f}", (x, r_wc[i]),
-                                        xytext=(0, 12), color='#9467bd', fontsize=11))
+                                        xytext=(0, remote_offset), color='#9467bd', fontsize=11))
         optimize_annotations(texts, ax=ax)
 
         ax.set_xlabel('Motion Threshold Value (τ)', fontsize=14, labelpad=10)
