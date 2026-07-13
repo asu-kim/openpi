@@ -147,6 +147,14 @@ def apply_log_scales(ax, x_values: list, y_values: list,
         scale_setter("symlog", base=10, linthresh=linthresh)
 
 
+def finalize_plot_layout(fig, aspect_1_1: bool = False):
+    """Lay out the figure while reserving room for labels on square plots."""
+    if aspect_1_1:
+        fig.tight_layout(rect=(0, 0.08, 1, 1))
+    else:
+        fig.tight_layout()
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Test 1: Validity Period vs. Monitor Latency
 # ─────────────────────────────────────────────────────────────────────────────
@@ -337,7 +345,7 @@ def _plot_single_mode(validities: list, avg_latencies: list, wc_latencies: list,
 
         if not no_title:
             fig.suptitle(plot_title, fontsize=16, fontweight='bold', y=1.01)
-        fig.tight_layout()
+        finalize_plot_layout(fig, aspect_1_1)
 
         fig.savefig(output_dir / f"{file_stem}.png", bbox_inches='tight')
         fig.savefig(output_dir / f"{file_stem}.pdf", bbox_inches='tight')
@@ -500,7 +508,7 @@ def generate_comparative_plots(local_csv: Path, remote_csv: Path,
         plot_title = f"{test_label}: Average Monitor Latency vs. Validity Period — Local vs. Remote Auth"
         if not no_title:
             fig.suptitle(plot_title, fontsize=16, fontweight='bold', y=1.01)
-        fig.tight_layout()
+        finalize_plot_layout(fig, aspect_1_1)
 
         stem = f"{test_name}_avg_latency_local_vs_remote"
         fig.savefig(output_dir / f"{stem}.png", bbox_inches='tight')
@@ -547,7 +555,7 @@ def generate_comparative_plots(local_csv: Path, remote_csv: Path,
         plot_title = f"{test_label}: Worst-Case Monitor Latency vs. Validity Period — Local vs. Remote Auth"
         if not no_title:
             fig.suptitle(plot_title, fontsize=16, fontweight='bold', y=1.01)
-        fig.tight_layout()
+        finalize_plot_layout(fig, aspect_1_1)
 
         stem = f"{test_name}_worstcase_latency_local_vs_remote"
         fig.savefig(output_dir / f"{stem}.png", bbox_inches='tight')
@@ -757,7 +765,7 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
         plot_title = f"{test_label}: Average Monitor Latency vs. Motion Threshold — {mode_label}"
         if not no_title:
             fig.suptitle(plot_title, fontsize=16, fontweight='bold', y=1.01)
-        fig.tight_layout()
+        finalize_plot_layout(fig, aspect_1_1)
 
         file_stem = f"{test_name}_{auth_mode}_threshold_vs_avg_latency"
         fig.savefig(output_dir / f"{file_stem}.png", bbox_inches='tight')
@@ -799,7 +807,7 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
         plot_title = f"{test_label}: Worst-Case Monitor Latency vs. Motion Threshold — {mode_label}"
         if not no_title:
             fig.suptitle(plot_title, fontsize=16, fontweight='bold', y=1.01)
-        fig.tight_layout()
+        finalize_plot_layout(fig, aspect_1_1)
 
         file_stem = f"{test_name}_{auth_mode}_threshold_vs_worstcase_latency"
         fig.savefig(output_dir / f"{file_stem}.png", bbox_inches='tight')
@@ -894,7 +902,7 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
         plot_title = f"{test_label}: Average Monitor Latency vs. Threshold — Local vs. Remote Auth"
         if not no_title:
             fig.suptitle(plot_title, fontsize=16, fontweight='bold', y=1.01)
-        fig.tight_layout()
+        finalize_plot_layout(fig, aspect_1_1)
 
         stem = f"{test_name}_avg_latency_local_vs_remote"
         fig.savefig(output_dir / f"{stem}.png", bbox_inches='tight')
@@ -939,7 +947,7 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
         plot_title = f"{test_label}: Worst-Case Monitor Latency vs. Threshold — Local vs. Remote Auth"
         if not no_title:
             fig.suptitle(plot_title, fontsize=16, fontweight='bold', y=1.01)
-        fig.tight_layout()
+        finalize_plot_layout(fig, aspect_1_1)
 
         stem = f"{test_name}_worstcase_latency_local_vs_remote"
         fig.savefig(output_dir / f"{stem}.png", bbox_inches='tight')
