@@ -45,6 +45,7 @@ LEGEND_FONT_SIZE = 12
 FIGURE_TITLE_FONT_SIZE = 16
 DATA_LABEL_FONT_SIZE = 16
 DATA_LABEL_BOUNDARY_PADDING_POINTS = 4
+DATA_LABEL_MIN_GAP_POINTS = 4
 
 # Ensure MPLCONFIGDIR is set to a writable temporary directory to avoid permission errors on restricted/shared workstations
 if "MPLCONFIGDIR" not in os.environ:
@@ -169,6 +170,59 @@ def optimize_annotations(texts, ax=None):
     pass
 
 
+def separate_close_data_labels(fig):
+    """Stack rendered labels vertically when their text boxes are too close."""
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    gap_px = DATA_LABEL_MIN_GAP_POINTS * fig.dpi / 72
+    pixels_to_points = 72 / fig.dpi
+    labels = [
+        label
+        for ax in fig.axes
+        for label in ax.texts
+        if label.get_gid() == "data-label"
+    ]
+    placed_boxes = []
+    adjusted = False
+
+    for label in labels:
+        label_box = label.get_window_extent(renderer)
+        total_dy_px = 0
+
+        while True:
+            close_boxes = [
+                other_box
+                for other_box in placed_boxes
+                if (
+                    label_box.x0 < other_box.x1 + gap_px
+                    and label_box.x1 > other_box.x0 - gap_px
+                    and label_box.y0 < other_box.y1 + gap_px
+                    and label_box.y1 > other_box.y0 - gap_px
+                )
+            ]
+            if not close_boxes:
+                break
+
+            dy_px = max(other_box.y1 + gap_px - label_box.y0
+                        for other_box in close_boxes)
+            if dy_px <= 0:
+                break
+            label_box = label_box.translated(0, dy_px)
+            total_dy_px += dy_px
+
+        if total_dy_px:
+            offset_x, offset_y = label.get_position()
+            label.set_position((
+                offset_x,
+                offset_y + total_dy_px * pixels_to_points,
+            ))
+            adjusted = True
+        placed_boxes.append(label_box)
+
+    if adjusted:
+        fig.canvas.draw()
+
+
 def keep_data_labels_inside_axes(fig):
     """Shift data labels inward when their rendered bounds cross an axes box."""
     fig.canvas.draw()
@@ -283,6 +337,8 @@ def finalize_plot_layout(fig, aspect_1_1: bool = False):
         fig.tight_layout(rect=(0, 0.08, 1, 1))
     else:
         fig.tight_layout()
+    keep_data_labels_inside_axes(fig)
+    separate_close_data_labels(fig)
     keep_data_labels_inside_axes(fig)
 
 
