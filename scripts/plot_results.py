@@ -113,6 +113,19 @@ def optimize_annotations(texts, ax=None):
     pass
 
 
+LOG_X_ZERO_FLOOR = 0.001
+
+
+def get_x_coordinates(values: list, equidistant_x: bool = False,
+                      log_x: bool = False) -> list:
+    """Return plot coordinates without changing the source values or labels."""
+    if equidistant_x:
+        return list(range(len(values)))
+    if log_x:
+        return [LOG_X_ZERO_FLOOR if float(value) == 0 else value for value in values]
+    return values
+
+
 def apply_log_scales(ax, x_values: list, y_values: list,
                      log_x: bool = False, log_y: bool = False):
     """Apply base-10 log scales, retaining zero/negative data with symlog."""
@@ -269,10 +282,7 @@ def _plot_single_mode(validities: list, avg_latencies: list, wc_latencies: list,
         if aspect_1_1:
             ax1.set_box_aspect(1)
 
-        if equidistant_x:
-            x_coords = list(range(len(validities)))
-        else:
-            x_coords = validities
+        x_coords = get_x_coordinates(validities, equidistant_x, log_x)
         x_labels = [f"{int(v)}s" for v in validities]
 
         ax1.plot(x_coords, avg_latencies,
@@ -448,10 +458,7 @@ def generate_comparative_plots(local_csv: Path, remote_csv: Path,
     r_avg = [remote_map_avg[v] for v in common_v]
     r_wc  = [remote_map_wc[v]  for v in common_v]
 
-    if equidistant_x:
-        x_coords = list(range(len(common_v)))
-    else:
-        x_coords = common_v
+    x_coords = get_x_coordinates(common_v, equidistant_x, log_x)
     x_labels   = [f"{int(v)}s" for v in common_v]
     test_label = test_name.upper()
     figsize = (8, 8) if aspect_1_1 else (11, 6)
@@ -716,10 +723,7 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
     mode_label = auth_mode.capitalize() + " Auth"
     figsize = (8, 8) if aspect_1_1 else (11, 6)
 
-    if equidistant_x:
-        x_coords = list(range(len(thresholds)))
-    else:
-        x_coords = thresholds
+    x_coords = get_x_coordinates(thresholds, equidistant_x, log_x)
     x_labels = [f"{t:.4f}" for t in thresholds]
 
     # ── Graph 1: Average Monitor Latency vs. Threshold ───────────────────────
@@ -850,10 +854,7 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
     r_avg = [remote_map_avg[t] for t in common_t]
     r_wc  = [remote_map_wc[t]  for t in common_t]
 
-    if equidistant_x:
-        x_coords = list(range(len(common_t)))
-    else:
-        x_coords = common_t
+    x_coords = get_x_coordinates(common_t, equidistant_x, log_x)
     x_labels   = [f"{t:.4f}" for t in common_t]
     test_label = test_name.upper()
     figsize    = (8, 8) if aspect_1_1 else (11, 6)
@@ -1077,7 +1078,7 @@ def main():
     )
     parser.add_argument(
         "--log-x", action="store_true", dest="log_x",
-        help="Use base-10 logarithmic spacing on the x-axis. Uses symmetric-log around zero when needed."
+        help="Use base-10 logarithmic spacing on the x-axis. Zero values are plotted at 0.001 while retaining their original labels."
     )
     parser.add_argument(
         "--log-y", action="store_true", dest="log_y",
