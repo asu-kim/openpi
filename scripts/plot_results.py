@@ -98,6 +98,36 @@ def infer_test_context(reports_dir: Path) -> tuple[str, str, str]:
     return None, None, None
 
 
+def discover_compare_csv(reports_dir: Path, test_name: str,
+                         auth_mode: str, bypass_mode: str = "still") -> Path | None:
+    """Find the newest completed run for the opposite authentication mode."""
+    parts = reports_dir.parts
+    test_reports_root = None
+    for index, part in enumerate(parts):
+        if part == "test_reports":
+            test_reports_root = Path(*parts[:index + 1])
+            break
+
+    if test_reports_root is None or auth_mode not in {"local", "remote"}:
+        return None
+
+    other_mode = "remote" if auth_mode == "local" else "local"
+    if test_name == "test2":
+        comparison_root = test_reports_root / "test2" / other_mode / bypass_mode
+        csv_name = TEST2_CSV_NAME
+    else:
+        comparison_root = test_reports_root / "test1" / other_mode
+        csv_name = TEST1_CSV_NAME
+
+    if not comparison_root.is_dir():
+        return None
+
+    candidates = [path for path in comparison_root.glob(f"*/{csv_name}") if path.is_file()]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda path: path.stat().st_mtime).resolve()
+
+
 def annotate_point(ax, text, xy, xytext=(0, 12), color='black', fontsize=11, ha='center'):
     ann = ax.annotate(
         text, xy=xy,
@@ -1094,10 +1124,11 @@ def main():
     )
     parser.add_argument(
         "--compare-csv", default=None,
-        help="(Test 1 only) Path to the other auth mode's validity_vs_latency.csv. "
+        help="Path to the other auth mode's summary CSV. "
              "When provided, two separate comparative plots are generated (avg latency "
              "and worst-case latency, each with local and remote on the same graph). "
-             "The CSV must have been produced by a completed plot_results.py run."
+             "When omitted, the newest completed opposite-auth run is auto-discovered "
+             "from the test_reports hierarchy."
     )
     parser.add_argument(
         "--show-active-rate", action="store_true",
@@ -1167,6 +1198,16 @@ def main():
         show_active=args.show_active_rate, show_still=args.show_still_rate
     )
 
+    compare_csv = Path(args.compare_csv).resolve() if args.compare_csv else discover_compare_csv(
+        reports_dir, test_name, auth_mode, args.bypass_mode
+    )
+    if compare_csv and not args.compare_csv:
+        print(f"🔍 Auto-discovered comparison CSV: {compare_csv}")
+    elif not compare_csv and not args.compare_csv:
+        other_mode = "remote" if auth_mode == "local" else "local"
+        print(f"ℹ️  No completed {other_mode} comparison run was found; "
+              "only single-mode graphs will be generated.")
+
     if is_test2:
         thresholds, runs = discover_test2_reports(reports_dir)
         print("=" * 80)
@@ -1188,7 +1229,6 @@ def main():
             **plot_options
         )
 
-        compare_csv = Path(args.compare_csv).resolve() if args.compare_csv else None
         if compare_csv:
             if not compare_csv.exists():
                 print(f"⚠️  --compare-csv path not found: {compare_csv}. Skipping Test 2 comparative plots.")
@@ -1207,7 +1247,6 @@ def main():
                 )
     else:
         # ── Test 1: validity vs. monitor latency ──────────────────────────────
-        compare_csv = Path(args.compare_csv).resolve() if args.compare_csv else None
         cmp_auth_mode = None
         if compare_csv and compare_csv.exists():
             _, cmp_inferred_mode, _ = infer_test_context(compare_csv.parent)
@@ -1236,7 +1275,6 @@ def main():
         )
 
         # Step 3: if a compare CSV is provided, also generate comparative plots
-        compare_csv = Path(args.compare_csv).resolve() if args.compare_csv else None
         if compare_csv:
             if not compare_csv.exists():
                 print(f"⚠️  --compare-csv path not found: {compare_csv}. "
