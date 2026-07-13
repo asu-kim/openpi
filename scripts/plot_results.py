@@ -1186,7 +1186,9 @@ def main():
     )
     parser.add_argument(
         "--log-x", action="store_true", dest="log_x",
-        help="Use base-10 logarithmic spacing on the x-axis. Zero values are plotted at 0.001 while retaining their original labels."
+        help="Use base-10 logarithmic spacing on the Test 2 threshold x-axis. "
+             "Test 1 always uses a linear validity-period x-axis. Zero Test 2 "
+             "values are plotted at 0.001 while retaining their original labels."
     )
     parser.add_argument(
         "--log-y", action="store_true", dest="log_y",
@@ -1201,9 +1203,6 @@ def main():
         help="Omit graph titles (suptitle) from rendered plots."
     )
     args = parser.parse_args()
-
-    if args.equidistant_x and args.log_x:
-        parser.error("--equidistant-x and --log-x cannot be used together")
 
     reports_dir = Path(args.reports_dir).resolve()
     output_dir  = Path(args.output_dir).resolve() if args.output_dir else reports_dir
@@ -1234,11 +1233,16 @@ def main():
     if is_test2:
         test_name = "test2"
 
+    if is_test2 and args.equidistant_x and args.log_x:
+        parser.error("--equidistant-x and --log-x cannot be used together")
+    if not is_test2 and args.log_x:
+        print("ℹ️  Ignoring --log-x for Test 1; its validity-period x-axis is always linear.")
+
     plot_options = {
         "equidistant_x": args.equidistant_x,
         "aspect_1_1": args.aspect_1_1,
         "no_title": args.no_title,
-        "log_x": args.log_x,
+        "log_x": args.log_x if is_test2 else False,
         "log_y": args.log_y,
     }
     print_plot_options(
