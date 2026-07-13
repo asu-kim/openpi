@@ -347,8 +347,8 @@ def _plot_single_mode(validities: list, avg_latencies: list, wc_latencies: list,
             fig.suptitle(plot_title, fontsize=16, fontweight='bold', y=1.01)
         finalize_plot_layout(fig, aspect_1_1)
 
-        fig.savefig(output_dir / f"{file_stem}.png", bbox_inches='tight')
-        fig.savefig(output_dir / f"{file_stem}.pdf", bbox_inches='tight')
+        fig.savefig(output_dir / f"{file_stem}.png", bbox_inches='tight', pad_inches=0.25)
+        fig.savefig(output_dir / f"{file_stem}.pdf", bbox_inches='tight', pad_inches=0.25)
         plt.close(fig)
         print(f"📈 Graph (PNG) saved to: {output_dir / file_stem}.png")
         print(f"📈 Graph (PDF) saved to: {output_dir / file_stem}.pdf")
@@ -511,8 +511,8 @@ def generate_comparative_plots(local_csv: Path, remote_csv: Path,
         finalize_plot_layout(fig, aspect_1_1)
 
         stem = f"{test_name}_avg_latency_local_vs_remote"
-        fig.savefig(output_dir / f"{stem}.png", bbox_inches='tight')
-        fig.savefig(output_dir / f"{stem}.pdf", bbox_inches='tight')
+        fig.savefig(output_dir / f"{stem}.png", bbox_inches='tight', pad_inches=0.25)
+        fig.savefig(output_dir / f"{stem}.pdf", bbox_inches='tight', pad_inches=0.25)
         plt.close(fig)
         print(f"📈 Comparative avg-latency graph saved to: {output_dir}/{stem}.png / .pdf")
     except Exception as e:
@@ -558,8 +558,8 @@ def generate_comparative_plots(local_csv: Path, remote_csv: Path,
         finalize_plot_layout(fig, aspect_1_1)
 
         stem = f"{test_name}_worstcase_latency_local_vs_remote"
-        fig.savefig(output_dir / f"{stem}.png", bbox_inches='tight')
-        fig.savefig(output_dir / f"{stem}.pdf", bbox_inches='tight')
+        fig.savefig(output_dir / f"{stem}.png", bbox_inches='tight', pad_inches=0.25)
+        fig.savefig(output_dir / f"{stem}.pdf", bbox_inches='tight', pad_inches=0.25)
         plt.close(fig)
         print(f"📈 Comparative worst-case graph saved to: {output_dir}/{stem}.png / .pdf")
     except Exception as e:
@@ -768,8 +768,8 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
         finalize_plot_layout(fig, aspect_1_1)
 
         file_stem = f"{test_name}_{auth_mode}_threshold_vs_avg_latency"
-        fig.savefig(output_dir / f"{file_stem}.png", bbox_inches='tight')
-        fig.savefig(output_dir / f"{file_stem}.pdf", bbox_inches='tight')
+        fig.savefig(output_dir / f"{file_stem}.png", bbox_inches='tight', pad_inches=0.25)
+        fig.savefig(output_dir / f"{file_stem}.pdf", bbox_inches='tight', pad_inches=0.25)
         plt.close(fig)
         print(f"📈 Graph (PNG) saved to: {output_dir / file_stem}.png")
         print(f"📈 Graph (PDF) saved to: {output_dir / file_stem}.pdf")
@@ -810,8 +810,8 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
         finalize_plot_layout(fig, aspect_1_1)
 
         file_stem = f"{test_name}_{auth_mode}_threshold_vs_worstcase_latency"
-        fig.savefig(output_dir / f"{file_stem}.png", bbox_inches='tight')
-        fig.savefig(output_dir / f"{file_stem}.pdf", bbox_inches='tight')
+        fig.savefig(output_dir / f"{file_stem}.png", bbox_inches='tight', pad_inches=0.25)
+        fig.savefig(output_dir / f"{file_stem}.pdf", bbox_inches='tight', pad_inches=0.25)
         plt.close(fig)
         print(f"📈 Graph (PNG) saved to: {output_dir / file_stem}.png")
         print(f"📈 Graph (PDF) saved to: {output_dir / file_stem}.pdf")
@@ -905,8 +905,8 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
         finalize_plot_layout(fig, aspect_1_1)
 
         stem = f"{test_name}_avg_latency_local_vs_remote"
-        fig.savefig(output_dir / f"{stem}.png", bbox_inches='tight')
-        fig.savefig(output_dir / f"{stem}.pdf", bbox_inches='tight')
+        fig.savefig(output_dir / f"{stem}.png", bbox_inches='tight', pad_inches=0.25)
+        fig.savefig(output_dir / f"{stem}.pdf", bbox_inches='tight', pad_inches=0.25)
         plt.close(fig)
         print(f"📈 Comparative avg-latency graph saved to: {output_dir}/{stem}.png / .pdf")
     except Exception as e:
@@ -950,8 +950,8 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
         finalize_plot_layout(fig, aspect_1_1)
 
         stem = f"{test_name}_worstcase_latency_local_vs_remote"
-        fig.savefig(output_dir / f"{stem}.png", bbox_inches='tight')
-        fig.savefig(output_dir / f"{stem}.pdf", bbox_inches='tight')
+        fig.savefig(output_dir / f"{stem}.png", bbox_inches='tight', pad_inches=0.25)
+        fig.savefig(output_dir / f"{stem}.pdf", bbox_inches='tight', pad_inches=0.25)
         plt.close(fig)
         print(f"📈 Comparative worst-case graph saved to: {output_dir}/{stem}.png / .pdf")
     except Exception as e:
