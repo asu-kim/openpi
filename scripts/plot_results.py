@@ -898,7 +898,8 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
                                      aspect_1_1: bool = False,
                                      no_title: bool = False,
                                      log_x: bool = False,
-                                     log_y: bool = False):
+                                     log_y: bool = False,
+                                     primary_auth_mode: str = "local"):
     """Generate two separate comparative plots for Test 2 from threshold_vs_latency.csv files."""
     if not MATPLOTLIB_AVAILABLE:
         print("\n⚠️  Warning: matplotlib is not available — comparative plots skipped.")
@@ -908,29 +909,50 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
     local_t, local_avg, local_wc, l_act_all, l_st_all = read_test2_csv(local_csv)
     remote_t, remote_avg, remote_wc, r_act_all, r_st_all = read_test2_csv(remote_csv)
 
-    local_map_avg = {round(t, 4): avg for t, avg in zip(local_t, local_avg)}
-    local_map_wc  = {round(t, 4): wc  for t, wc  in zip(local_t, local_wc)}
-    local_map_act = {round(t, 4): act for t, act in zip(local_t, l_act_all)}
-    local_map_st  = {round(t, 4): st  for t, st  in zip(local_t, l_st_all)}
-    remote_map_avg = {round(t, 4): avg for t, avg in zip(remote_t, remote_avg)}
-    remote_map_wc  = {round(t, 4): wc  for t, wc  in zip(remote_t, remote_wc)}
+    local_rows = sorted(zip(local_t, local_avg, local_wc, l_act_all, l_st_all))
+    remote_rows = sorted(zip(remote_t, remote_avg, remote_wc, r_act_all, r_st_all))
+    if not local_rows or not remote_rows:
+        print("⚠️  Local or remote comparison CSV contains no data rows.")
+        return
 
-    common_t = sorted(set(local_map_avg.keys()) & set(remote_map_avg.keys()))
-    if not common_t:
-        if len(local_t) == len(remote_t):
-            common_t = sorted([round(t, 4) for t in local_t])
-            remote_map_avg = {round(lt, 4): ra for lt, ra in zip(sorted(local_t), remote_avg)}
-            remote_map_wc  = {round(lt, 4): rw for lt, rw in zip(sorted(local_t), remote_wc)}
-        else:
+    if len(local_rows) == len(remote_rows):
+        local_t, l_avg, l_wc, l_act, l_st = map(list, zip(*local_rows))
+        remote_t, r_avg, r_wc, r_act, r_st = map(list, zip(*remote_rows))
+        use_remote_grid = primary_auth_mode == "remote"
+        common_t = remote_t if use_remote_grid else local_t
+        plot_act = r_act if use_remote_grid else l_act
+        plot_st = r_st if use_remote_grid else l_st
+
+        local_grid = [round(value, 4) for value in local_t]
+        remote_grid = [round(value, 4) for value in remote_t]
+        if local_grid != remote_grid:
+            print("⚠️  Local and remote threshold values differ; aligning rows by "
+                  f"position and using the {primary_auth_mode} CSV threshold grid.")
+    else:
+        local_map_avg = {round(t, 4): avg for t, avg in zip(local_t, local_avg)}
+        local_map_wc = {round(t, 4): wc for t, wc in zip(local_t, local_wc)}
+        local_map_act = {round(t, 4): act for t, act in zip(local_t, l_act_all)}
+        local_map_st = {round(t, 4): st for t, st in zip(local_t, l_st_all)}
+        remote_map_avg = {round(t, 4): avg for t, avg in zip(remote_t, remote_avg)}
+        remote_map_wc = {round(t, 4): wc for t, wc in zip(remote_t, remote_wc)}
+        remote_map_act = {round(t, 4): act for t, act in zip(remote_t, r_act_all)}
+        remote_map_st = {round(t, 4): st for t, st in zip(remote_t, r_st_all)}
+
+        common_t = sorted(set(local_map_avg) & set(remote_map_avg))
+        if not common_t:
             print("⚠️  No common thresholds between local and remote CSVs.")
             return
 
-    l_avg = [local_map_avg[t]  for t in common_t]
-    l_wc  = [local_map_wc[t]   for t in common_t]
-    l_act = [local_map_act[t]  for t in common_t]
-    l_st  = [local_map_st[t]   for t in common_t]
-    r_avg = [remote_map_avg[t] for t in common_t]
-    r_wc  = [remote_map_wc[t]  for t in common_t]
+        l_avg = [local_map_avg[t] for t in common_t]
+        l_wc = [local_map_wc[t] for t in common_t]
+        r_avg = [remote_map_avg[t] for t in common_t]
+        r_wc = [remote_map_wc[t] for t in common_t]
+        if primary_auth_mode == "remote":
+            plot_act = [remote_map_act[t] for t in common_t]
+            plot_st = [remote_map_st[t] for t in common_t]
+        else:
+            plot_act = [local_map_act[t] for t in common_t]
+            plot_st = [local_map_st[t] for t in common_t]
 
     x_coords = get_x_coordinates(common_t, equidistant_x, log_x)
     x_labels   = [f"{t:.4f}" for t in common_t]
@@ -967,7 +989,7 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
         ax.grid(True, linestyle='--', alpha=0.4)
         ax.legend(frameon=True, facecolor='white', framealpha=0.9, fontsize=12, loc='upper right')
 
-        _add_rate_twinx(ax, x_coords, l_act, l_st, show_active, show_still)
+        _add_rate_twinx(ax, x_coords, plot_act, plot_st, show_active, show_still)
 
         plot_title = f"{test_label}: Average Monitor Latency vs. Threshold — Local vs. Remote Auth"
         if not no_title:
@@ -1012,7 +1034,7 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
         ax.grid(True, linestyle='--', alpha=0.4)
         ax.legend(frameon=True, facecolor='white', framealpha=0.9, fontsize=12, loc='upper right')
 
-        _add_rate_twinx(ax, x_coords, l_act, l_st, show_active, show_still)
+        _add_rate_twinx(ax, x_coords, plot_act, plot_st, show_active, show_still)
 
         plot_title = f"{test_label}: Worst-Case Monitor Latency vs. Threshold — Local vs. Remote Auth"
         if not no_title:
@@ -1276,7 +1298,7 @@ def main():
                 generate_test2_comparative_plots(
                     local_csv, remote_csv, output_dir, test_name=test_name,
                     show_active=args.show_active_rate, show_still=args.show_still_rate,
-                    **plot_options
+                    primary_auth_mode=auth_mode, **plot_options
                 )
     else:
         # ── Test 1: validity vs. monitor latency ──────────────────────────────
