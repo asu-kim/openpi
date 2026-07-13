@@ -169,6 +169,19 @@ def get_x_coordinates(values: list, equidistant_x: bool = False,
     return values
 
 
+def set_threshold_x_ticks(ax, x_coords: list, thresholds: list,
+                          log_x: bool = False):
+    """Render compact, readable threshold labels without changing coordinates."""
+    labels = [f"{float(value):.10g}" for value in thresholds]
+    ax.set_xticks(x_coords)
+    ax.set_xticklabels(
+        labels,
+        fontsize=13,
+        rotation=20 if log_x else 0,
+        ha="right" if log_x else "center",
+    )
+
+
 def apply_log_scales(ax, x_values: list, y_values: list,
                      log_x: bool = False, log_y: bool = False):
     """Apply base-10 log scales, retaining zero/negative data with symlog."""
@@ -804,8 +817,6 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
     figsize = (8, 8) if aspect_1_1 else (11, 6)
 
     x_coords = get_x_coordinates(thresholds, equidistant_x, log_x)
-    x_labels = [f"{t:.4f}" for t in thresholds]
-
     # ── Graph 1: Average Monitor Latency vs. Threshold ───────────────────────
     try:
         color_lat = '#1f77b4'
@@ -823,8 +834,7 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
 
         ax.set_xlabel('Motion Threshold Value (τ)', fontsize=14, labelpad=10)
         ax.set_ylabel('Average Monitor Latency (ms)', fontsize=14, color=color_lat, labelpad=10)
-        ax.set_xticks(x_coords)
-        ax.set_xticklabels(x_labels, fontsize=13)
+        set_threshold_x_ticks(ax, x_coords, thresholds, log_x)
         if equidistant_x:
             ax.set_xlim(-0.4, len(x_coords) - 0.6)
         if not log_y:
@@ -865,8 +875,7 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
 
         ax.set_xlabel('Motion Threshold Value (τ)', fontsize=14, labelpad=10)
         ax.set_ylabel('Worst-Case Monitor Latency (ms)', fontsize=14, color=color_wc, labelpad=10)
-        ax.set_xticks(x_coords)
-        ax.set_xticklabels(x_labels, fontsize=13)
+        set_threshold_x_ticks(ax, x_coords, thresholds, log_x)
         if equidistant_x:
             ax.set_xlim(-0.4, len(x_coords) - 0.6)
         if not log_y:
@@ -955,7 +964,6 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
             plot_st = [local_map_st[t] for t in common_t]
 
     x_coords = get_x_coordinates(common_t, equidistant_x, log_x)
-    x_labels   = [f"{t:.4f}" for t in common_t]
     test_label = test_name.upper()
     figsize    = (8, 8) if aspect_1_1 else (11, 6)
 
@@ -980,8 +988,7 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
 
         ax.set_xlabel('Motion Threshold Value (τ)', fontsize=14, labelpad=10)
         ax.set_ylabel('Average Monitor Latency (ms)', fontsize=14, labelpad=10)
-        ax.set_xticks(x_coords)
-        ax.set_xticklabels(x_labels, fontsize=13)
+        set_threshold_x_ticks(ax, x_coords, common_t, log_x)
         if equidistant_x:
             ax.set_xlim(-0.4, len(x_coords) - 0.6)
         if not log_y:
@@ -1025,8 +1032,7 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
 
         ax.set_xlabel('Motion Threshold Value (τ)', fontsize=14, labelpad=10)
         ax.set_ylabel('Worst-Case Monitor Latency (ms)', fontsize=14, labelpad=10)
-        ax.set_xticks(x_coords)
-        ax.set_xticklabels(x_labels, fontsize=13)
+        set_threshold_x_ticks(ax, x_coords, common_t, log_x)
         if equidistant_x:
             ax.set_xlim(-0.4, len(x_coords) - 0.6)
         if not log_y:
