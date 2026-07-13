@@ -157,6 +157,7 @@ def optimize_annotations(texts, ax=None):
 
 
 LOG_X_ZERO_FLOOR = 0.001
+LATENCY_Y_HEADROOM_FACTOR = 1.2
 
 
 def get_x_coordinates(values: list, equidistant_x: bool = False,
@@ -392,7 +393,7 @@ def _plot_single_mode(validities: list, avg_latencies: list, wc_latencies: list,
         ax1.set_ylabel('Avg Monitor Latency (ms)', fontsize=14, color=color_avg, labelpad=10)
         ax1.tick_params(axis='y', labelcolor=color_avg)
         if not log_y:
-            ax1.set_ylim(0, max(max(avg_latencies, default=0) * 1.4, 20))
+            ax1.set_ylim(0, max(max(avg_latencies, default=0) * LATENCY_Y_HEADROOM_FACTOR, 20))
         ax1.set_xticks(x_coords)
         ax1.set_xticklabels(x_labels, fontsize=13)
         if equidistant_x:
@@ -415,7 +416,7 @@ def _plot_single_mode(validities: list, avg_latencies: list, wc_latencies: list,
                        color=color_wc, labelpad=10)
         ax2.tick_params(axis='y', labelcolor=color_wc)
         if not log_y:
-            ax2.set_ylim(0, max(max(wc_latencies, default=0) * 1.4, 20))
+            ax2.set_ylim(0, max(max(wc_latencies, default=0) * LATENCY_Y_HEADROOM_FACTOR, 20))
 
         lines1, labels1 = ax1.get_legend_handles_labels()
         lines2, labels2 = ax2.get_legend_handles_labels()
@@ -586,7 +587,7 @@ def generate_comparative_plots(local_csv: Path, remote_csv: Path,
         if equidistant_x:
             ax.set_xlim(-0.4, len(x_coords) - 0.6)
         if not log_y:
-            ax.set_ylim(0, max(max(l_avg + r_avg, default=0) * 1.4, 20))
+            ax.set_ylim(0, max(max(l_avg + r_avg, default=0) * LATENCY_Y_HEADROOM_FACTOR, 20))
         ax.grid(True, linestyle='--', alpha=0.4)
         ax.legend(frameon=True, facecolor='white', framealpha=0.9, fontsize=12, loc='upper right')
 
@@ -633,7 +634,7 @@ def generate_comparative_plots(local_csv: Path, remote_csv: Path,
         if equidistant_x:
             ax.set_xlim(-0.4, len(x_coords) - 0.6)
         if not log_y:
-            ax.set_ylim(0, max(max(l_wc + r_wc, default=0) * 1.4, 20))
+            ax.set_ylim(0, max(max(l_wc + r_wc, default=0) * LATENCY_Y_HEADROOM_FACTOR, 20))
         ax.grid(True, linestyle='--', alpha=0.4)
         ax.legend(frameon=True, facecolor='white', framealpha=0.9, fontsize=12, loc='upper right')
 
@@ -838,7 +839,7 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
         if equidistant_x:
             ax.set_xlim(-0.4, len(x_coords) - 0.6)
         if not log_y:
-            ax.set_ylim(0, max(max(avg_latencies, default=0) * 1.4, 20))
+            ax.set_ylim(0, max(max(avg_latencies, default=0) * LATENCY_Y_HEADROOM_FACTOR, 20))
         ax.grid(True, linestyle='--', alpha=0.4)
         ax.legend(frameon=True, facecolor='white', framealpha=0.9, fontsize=12, loc='upper right')
 
@@ -879,7 +880,7 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
         if equidistant_x:
             ax.set_xlim(-0.4, len(x_coords) - 0.6)
         if not log_y:
-            ax.set_ylim(0, max(max(wc_latencies, default=0) * 1.4, 20))
+            ax.set_ylim(0, max(max(wc_latencies, default=0) * LATENCY_Y_HEADROOM_FACTOR, 20))
         ax.grid(True, linestyle='--', alpha=0.4)
         ax.legend(frameon=True, facecolor='white', framealpha=0.9, fontsize=12, loc='upper right')
 
@@ -992,7 +993,7 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
         if equidistant_x:
             ax.set_xlim(-0.4, len(x_coords) - 0.6)
         if not log_y:
-            ax.set_ylim(0, max(max(l_avg + r_avg, default=0) * 1.4, 20))
+            ax.set_ylim(0, max(max(l_avg + r_avg, default=0) * LATENCY_Y_HEADROOM_FACTOR, 20))
         ax.grid(True, linestyle='--', alpha=0.4)
         ax.legend(frameon=True, facecolor='white', framealpha=0.9, fontsize=12, loc='upper right')
 
@@ -1036,7 +1037,7 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
         if equidistant_x:
             ax.set_xlim(-0.4, len(x_coords) - 0.6)
         if not log_y:
-            ax.set_ylim(0, max(max(l_wc + r_wc, default=0) * 1.4, 20))
+            ax.set_ylim(0, max(max(l_wc + r_wc, default=0) * LATENCY_Y_HEADROOM_FACTOR, 20))
         ax.grid(True, linestyle='--', alpha=0.4)
         ax.legend(frameon=True, facecolor='white', framealpha=0.9, fontsize=12, loc='upper right')
 
