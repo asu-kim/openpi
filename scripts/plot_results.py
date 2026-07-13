@@ -128,6 +128,19 @@ def discover_compare_csv(reports_dir: Path, test_name: str,
     return max(candidates, key=lambda path: path.stat().st_mtime).resolve()
 
 
+def find_existing_summary_csv(reports_dir: Path, output_dir: Path,
+                              csv_name: str) -> Path | None:
+    """Return an existing summary CSV without rewriting or copying it."""
+    candidates = [output_dir / csv_name]
+    reports_csv = reports_dir / csv_name
+    if reports_csv != candidates[0]:
+        candidates.append(reports_csv)
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate.resolve()
+    return None
+
+
 def annotate_point(ax, text, xy, xytext=(0, 12), color='black', fontsize=11, ha='center'):
     ann = ax.annotate(
         text, xy=xy,
@@ -1169,6 +1182,7 @@ def main():
     if not reports_dir.exists():
         print(f"❌ Error: reports directory does not exist: {reports_dir}")
         sys.exit(1)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     inferred_test, inferred_mode, inferred_bypass = infer_test_context(reports_dir)
     test_name = args.test_name or inferred_test or "test1"
@@ -1182,7 +1196,12 @@ def main():
         print(f"🔍 Auto-inferred bypass mode: {args.bypass_mode}")
 
     # Check if there are any Test 2 reports (thresh_*_run_*.txt) or explicitly requested test2
-    is_test2 = (test_name.lower() == "test2") or list(reports_dir.glob("thresh_*_run_*.txt"))
+    is_test2 = (
+        test_name.lower() == "test2"
+        or bool(list(reports_dir.glob("thresh_*_run_*.txt")))
+        or (reports_dir / TEST2_CSV_NAME).is_file()
+        or (output_dir / TEST2_CSV_NAME).is_file()
+    )
     if is_test2:
         test_name = "test2"
 
@@ -1209,25 +1228,39 @@ def main():
               "only single-mode graphs will be generated.")
 
     if is_test2:
-        thresholds, runs = discover_test2_reports(reports_dir)
-        print("=" * 80)
-        print("AGGREGATING TEST 2 REPORTS & GENERATING GRAPH (Threshold vs Bypass & Latency)")
-        print("=" * 80)
-        print(f"Reports dir : {reports_dir}")
-        print(f"Output dir  : {output_dir}")
-        print(f"Thresholds  : {thresholds}")
-        print(f"Runs        : {runs} per threshold condition")
-        print(f"Bypass Mode : {args.bypass_mode}")
-        print(f"Test / Mode : {test_name} / {auth_mode}")
-        print("=" * 80)
+        primary_csv = find_existing_summary_csv(reports_dir, output_dir, TEST2_CSV_NAME)
+        if primary_csv:
+            print(f"♻️  Existing Test 2 CSV found: {primary_csv}")
+            print("   Skipping report aggregation and CSV generation.")
+            thresholds, avg_latencies, wc_latencies, active_rates, still_rates = read_test2_csv(primary_csv)
+            _plot_test2_single_mode(
+                thresholds, avg_latencies, wc_latencies, active_rates, still_rates,
+                output_dir, test_name, auth_mode,
+                show_active=args.show_active_rate, show_still=args.show_still_rate,
+                **plot_options
+            )
+        else:
+            thresholds, runs = discover_test2_reports(reports_dir)
+            print("=" * 80)
+            print("AGGREGATING TEST 2 REPORTS & GENERATING GRAPH (Threshold vs Bypass & Latency)")
+            print("=" * 80)
+            print(f"Reports dir : {reports_dir}")
+            print(f"Output dir  : {output_dir}")
+            print(f"Thresholds  : {thresholds}")
+            print(f"Runs        : {runs} per threshold condition")
+            print(f"Bypass Mode : {args.bypass_mode}")
+            print(f"Test / Mode : {test_name} / {auth_mode}")
+            print("=" * 80)
 
-        results, wc_results, active_results, still_results = load_test2_reports(reports_dir, thresholds, runs, bypass_mode=args.bypass_mode)
-        primary_csv = generate_test2_plots_and_reports(
-            thresholds, results, wc_results, active_results, still_results,
-            output_dir, test_name=test_name, auth_mode=auth_mode,
-            show_active=args.show_active_rate, show_still=args.show_still_rate,
-            **plot_options
-        )
+            results, wc_results, active_results, still_results = load_test2_reports(
+                reports_dir, thresholds, runs, bypass_mode=args.bypass_mode
+            )
+            primary_csv = generate_test2_plots_and_reports(
+                thresholds, results, wc_results, active_results, still_results,
+                output_dir, test_name=test_name, auth_mode=auth_mode,
+                show_active=args.show_active_rate, show_still=args.show_still_rate,
+                **plot_options
+            )
 
         if compare_csv:
             if not compare_csv.exists():
@@ -1252,27 +1285,38 @@ def main():
             _, cmp_inferred_mode, _ = infer_test_context(compare_csv.parent)
             cmp_auth_mode = cmp_inferred_mode or ("remote" if auth_mode == "local" else "local")
 
-        validities, runs = discover_reports(reports_dir)
-        print("=" * 80)
-        print("AGGREGATING TEST 1 REPORTS & GENERATING GRAPH")
-        print("=" * 80)
-        print(f"Reports dir : {reports_dir}")
-        print(f"Output dir  : {output_dir}")
-        print(f"Validities  : {[int(v) for v in validities]} seconds")
-        print(f"Runs        : {runs} per validity period")
-        print(f"Test / Mode : {test_name} / {auth_mode}")
-        if compare_csv:
-            print(f"Compare CSV : {compare_csv} ({cmp_auth_mode or 'unknown mode'})")
-        print("=" * 80)
+        primary_csv = find_existing_summary_csv(reports_dir, output_dir, TEST1_CSV_NAME)
+        if primary_csv:
+            print(f"♻️  Existing Test 1 CSV found: {primary_csv}")
+            print("   Skipping report aggregation and CSV generation.")
+            validities, avg_latencies, wc_latencies = read_test1_csv(primary_csv)
+            if MATPLOTLIB_AVAILABLE:
+                _plot_single_mode(
+                    validities, avg_latencies, wc_latencies,
+                    output_dir, test_name, auth_mode, **plot_options
+                )
+            else:
+                print("\n⚠️  Warning: matplotlib is not available — graphs skipped.")
+        else:
+            validities, runs = discover_reports(reports_dir)
+            print("=" * 80)
+            print("AGGREGATING TEST 1 REPORTS & GENERATING GRAPH")
+            print("=" * 80)
+            print(f"Reports dir : {reports_dir}")
+            print(f"Output dir  : {output_dir}")
+            print(f"Validities  : {[int(v) for v in validities]} seconds")
+            print(f"Runs        : {runs} per validity period")
+            print(f"Test / Mode : {test_name} / {auth_mode}")
+            if compare_csv:
+                print(f"Compare CSV : {compare_csv} ({cmp_auth_mode or 'unknown mode'})")
+            print("=" * 80)
 
-        results, worst_case_results = load_reports(reports_dir, validities, runs)
-
-        # Step 1+2: txt → CSV (writes primary dir's validity_vs_latency.csv)
-        primary_csv = generate_plots_and_reports(
-            validities, results, worst_case_results,
-            output_dir, test_name=test_name, auth_mode=auth_mode,
-            **plot_options
-        )
+            results, worst_case_results = load_reports(reports_dir, validities, runs)
+            primary_csv = generate_plots_and_reports(
+                validities, results, worst_case_results,
+                output_dir, test_name=test_name, auth_mode=auth_mode,
+                **plot_options
+            )
 
         # Step 3: if a compare CSV is provided, also generate comparative plots
         if compare_csv:
