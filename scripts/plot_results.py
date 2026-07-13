@@ -397,8 +397,7 @@ def _plot_single_mode(validities: list, avg_latencies: list, wc_latencies: list,
         x_labels = [f"{int(v)}s" for v in validities]
 
         ax1.plot(x_coords, avg_latencies,
-                 marker='o', markersize=8, linewidth=2.5, color=color_avg,
-                 label='Avg Monitor Latency')
+                 marker='o', markersize=8, linewidth=2.5, color=color_avg)
         apply_log_scales(ax1, x_coords, avg_latencies, log_x=log_x, log_y=log_y)
         texts1 = []
         for i, val in enumerate(x_coords):
@@ -420,8 +419,7 @@ def _plot_single_mode(validities: list, avg_latencies: list, wc_latencies: list,
         ax2 = ax1.twinx()
         ax2.plot(x_coords, wc_latencies,
                  marker='s', markersize=8, linewidth=2.5,
-                 linestyle='--', color=color_wc,
-                 label='Worst-Case Monitor Latency')
+                 linestyle='--', color=color_wc)
         apply_log_scales(ax2, x_coords, wc_latencies, log_x=log_x, log_y=log_y)
         texts2 = []
         for i, val in enumerate(x_coords):
@@ -434,12 +432,6 @@ def _plot_single_mode(validities: list, avg_latencies: list, wc_latencies: list,
         ax2.tick_params(axis='y', labelcolor=color_wc)
         if not log_y:
             ax2.set_ylim(0, max(max(wc_latencies, default=0) * LATENCY_Y_HEADROOM_FACTOR, 20))
-
-        lines1, labels1 = ax1.get_legend_handles_labels()
-        lines2, labels2 = ax2.get_legend_handles_labels()
-        ax1.legend(lines1 + lines2, labels1 + labels2,
-                   frameon=True, facecolor='white', framealpha=0.9, fontsize=12,
-                   loc='upper right')
 
         test_label = test_name.upper()
         mode_label = auth_mode.capitalize() + " Auth"
@@ -584,9 +576,9 @@ def generate_comparative_plots(local_csv: Path, remote_csv: Path,
         color_remote = '#d62728'   # red
 
         ax.plot(x_coords, l_avg, marker='o', markersize=8, linewidth=2.5,
-                color=color_local,  label='Local Auth — Avg Latency')
+                color=color_local, label='Local Auth')
         ax.plot(x_coords, r_avg, marker='s', markersize=8, linewidth=2.5,
-                color=color_remote, label='Remote Auth — Avg Latency', linestyle='--')
+                color=color_remote, label='Remote Auth', linestyle='--')
         apply_log_scales(ax, x_coords, l_avg + r_avg, log_x=log_x, log_y=log_y)
 
         texts = []
@@ -631,9 +623,9 @@ def generate_comparative_plots(local_csv: Path, remote_csv: Path,
         color_remote = '#9467bd'   # purple
 
         ax.plot(x_coords, l_wc, marker='o', markersize=8, linewidth=2.5,
-                color=color_local,  label='Local Auth — Worst-Case Latency')
+                color=color_local, label='Local Auth')
         ax.plot(x_coords, r_wc, marker='s', markersize=8, linewidth=2.5,
-                color=color_remote, label='Remote Auth — Worst-Case Latency', linestyle='--')
+                color=color_remote, label='Remote Auth', linestyle='--')
         apply_log_scales(ax, x_coords, l_wc + r_wc, log_x=log_x, log_y=log_y)
 
         texts = []
@@ -842,7 +834,7 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
         if aspect_1_1:
             ax.set_box_aspect(1)
         ax.plot(x_coords, avg_latencies, marker='o', markersize=8, linewidth=2.5,
-                color=color_lat, label='Avg Monitor Latency')
+                color=color_lat)
         apply_log_scales(ax, x_coords, avg_latencies, log_x=log_x, log_y=log_y)
         texts = []
         for i, x in enumerate(x_coords):
@@ -858,8 +850,6 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
         if not log_y:
             ax.set_ylim(0, max(max(avg_latencies, default=0) * LATENCY_Y_HEADROOM_FACTOR, 20))
         ax.grid(True, linestyle='--', alpha=0.4)
-        ax.legend(frameon=True, facecolor='white', framealpha=0.9, fontsize=12, loc='upper right')
-
         _add_rate_twinx(ax, x_coords, active_rates, still_rates, show_active, show_still)
 
         plot_title = f"{test_label}: Average Monitor Latency vs. Motion Threshold — {mode_label}"
@@ -883,7 +873,7 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
         if aspect_1_1:
             ax.set_box_aspect(1)
         ax.plot(x_coords, wc_latencies, marker='s', markersize=8, linewidth=2.5,
-                linestyle='--', color=color_wc, label='Worst-Case Monitor Latency')
+                linestyle='--', color=color_wc)
         apply_log_scales(ax, x_coords, wc_latencies, log_x=log_x, log_y=log_y)
         texts = []
         for i, x in enumerate(x_coords):
@@ -899,8 +889,6 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
         if not log_y:
             ax.set_ylim(0, max(max(wc_latencies, default=0) * LATENCY_Y_HEADROOM_FACTOR, 20))
         ax.grid(True, linestyle='--', alpha=0.4)
-        ax.legend(frameon=True, facecolor='white', framealpha=0.9, fontsize=12, loc='upper right')
-
         _add_rate_twinx(ax, x_coords, active_rates, still_rates, show_active, show_still)
 
         plot_title = f"{test_label}: Worst-Case Monitor Latency vs. Motion Threshold — {mode_label}"
@@ -991,9 +979,9 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
         if aspect_1_1:
             ax.set_box_aspect(1)
         ax.plot(x_coords, l_avg, marker='o', markersize=8, linewidth=2.5,
-                color='#1f77b4', label='Local Auth — Avg Latency')
+                color='#1f77b4', label='Local Auth')
         ax.plot(x_coords, r_avg, marker='s', markersize=8, linewidth=2.5,
-                color='#d62728', label='Remote Auth — Avg Latency', linestyle='--')
+                color='#d62728', label='Remote Auth', linestyle='--')
         apply_log_scales(ax, x_coords, l_avg + r_avg, log_x=log_x, log_y=log_y)
 
         texts = []
@@ -1038,9 +1026,9 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
         if aspect_1_1:
             ax.set_box_aspect(1)
         ax.plot(x_coords, l_wc, marker='o', markersize=8, linewidth=2.5,
-                color='#2ca02c', label='Local Auth — Worst-Case Latency')
+                color='#2ca02c', label='Local Auth')
         ax.plot(x_coords, r_wc, marker='s', markersize=8, linewidth=2.5,
-                color='#9467bd', label='Remote Auth — Worst-Case Latency', linestyle='--')
+                color='#9467bd', label='Remote Auth', linestyle='--')
         apply_log_scales(ax, x_coords, l_wc + r_wc, log_x=log_x, log_y=log_y)
 
         texts = []
