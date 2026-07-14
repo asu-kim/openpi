@@ -171,7 +171,7 @@ def optimize_annotations(texts, ax=None):
 
 
 def separate_close_data_labels(fig):
-    """Stack rendered labels vertically when their text boxes are too close."""
+    """Raise the higher-value label when rendered text boxes are too close."""
     fig.canvas.draw()
     renderer = fig.canvas.get_renderer()
     gap_px = DATA_LABEL_MIN_GAP_POINTS * fig.dpi / 72
@@ -182,6 +182,11 @@ def separate_close_data_labels(fig):
         for label in ax.texts
         if label.get_gid() == "data-label"
     ]
+    # Place lower plotted points first so a close higher-value label is the one
+    # shifted upward. This naturally raises the earlier label on decreasing data.
+    labels.sort(
+        key=lambda label: label.axes.transData.transform(label.xy)[1]
+    )
     placed_boxes = []
     adjusted = False
 
