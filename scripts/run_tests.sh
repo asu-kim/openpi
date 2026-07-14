@@ -20,18 +20,19 @@ fi
 # Argument parsing
 # Usage:
 #   ./scripts/run_tests.sh --test1|--test2|--test3 --local [--password <pw>] [--runs <n>]
-#   ./scripts/run_tests.sh --test1|--test2|--test3 --remote [--password <pw>] [--runs <n>]
+#   ./scripts/run_tests.sh --test1|--test2|--test3 --remote [--password <pw>] [--runs <n>] [--auth-delay-ms <ms>]
 # ─────────────────────────────────────────────────────────────────────────────
 TEST_NAME=""
 AUTH_MODE=""
 AUTH_PASSWORD="1234"
 RUNS="5"
 BYPASS_MODE="still"
+AUTH_DELAY_MS="0"
 PLOT_ARGS=()
 
 if [ "$#" -eq 0 ]; then
     echo "❌ Error: No arguments provided."
-    echo "Usage: $0 --test1|--test2|--test3 --local|--remote [--password <pw>] [--runs <n>] [--bypass-mode still|active]"
+    echo "Usage: $0 --test1|--test2|--test3 --local|--remote [--password <pw>] [--runs <n>] [--auth-delay-ms <ms>] [--bypass-mode still|active]"
     exit 1
 fi
 
@@ -84,13 +85,22 @@ while [[ "$#" -gt 0 ]]; do
                 exit 1
             fi
             ;;
+        --auth-delay-ms)
+            if [[ -n "${2:-}" ]]; then
+                AUTH_DELAY_MS="$2"
+                shift 2
+            else
+                echo "❌ Error: --auth-delay-ms requires a non-negative millisecond value."
+                exit 1
+            fi
+            ;;
         --equidistant-x|--log-x|--log-y|--show-active-rate|--show-still-rate|--aspect-1-1|--square|--aspect-ratio-1-1|--no-title)
             PLOT_ARGS+=("$1")
             shift
             ;;
         *)
             echo "❌ Error: Unknown argument '$1'"
-            echo "Usage: $0 --test1|--test2|--test3 --local|--remote [--password <pw>] [--runs <n>] [--bypass-mode still|active]"
+            echo "Usage: $0 --test1|--test2|--test3 --local|--remote [--password <pw>] [--runs <n>] [--auth-delay-ms <ms>] [--bypass-mode still|active]"
             exit 1
             ;;
     esac
@@ -99,13 +109,13 @@ done
 # Validate required flags
 if [ -z "$TEST_NAME" ]; then
     echo "❌ Error: A test flag is required (e.g. --test1, --test2, or --test3)."
-    echo "Usage: $0 --test1|--test2|--test3 --local|--remote [--password <pw>] [--runs <n>] [--bypass-mode still|active]"
+    echo "Usage: $0 --test1|--test2|--test3 --local|--remote [--password <pw>] [--runs <n>] [--auth-delay-ms <ms>] [--bypass-mode still|active]"
     exit 1
 fi
 
 if [ -z "$AUTH_MODE" ]; then
     echo "❌ Error: An auth mode flag is required (--local or --remote)."
-    echo "Usage: $0 --test1|--test2|--test3 --local|--remote [--password <pw>] [--runs <n>] [--bypass-mode still|active]"
+    echo "Usage: $0 --test1|--test2|--test3 --local|--remote [--password <pw>] [--runs <n>] [--auth-delay-ms <ms>] [--bypass-mode still|active]"
     exit 1
 fi
 
@@ -113,6 +123,17 @@ if ! [[ "$RUNS" =~ ^[1-9][0-9]*$ ]]; then
     echo "❌ Error: --runs must be a positive integer (received '$RUNS')."
     exit 1
 fi
+
+if ! [[ "$AUTH_DELAY_MS" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+    echo "❌ Error: --auth-delay-ms must be a non-negative number (received '$AUTH_DELAY_MS')."
+    exit 1
+fi
+
+if [ "$AUTH_MODE" != "remote" ] && ! [[ "$AUTH_DELAY_MS" =~ ^0+([.]0+)?$ ]]; then
+    echo "❌ Error: --auth-delay-ms is only supported with --remote."
+    exit 1
+fi
+export AUTH_NETWORK_DELAY_MS="$AUTH_DELAY_MS"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Output directory setup
@@ -180,6 +201,14 @@ mkdir -p "$OPENPI_DIR/test_reports/test2/remote/active"
 mkdir -p "$OPENPI_DIR/test_reports/test3/local"
 mkdir -p "$OPENPI_DIR/test_reports/test3/remote"
 
+{
+    echo "Test: $TEST_NAME"
+    echo "Auth mode: $AUTH_MODE"
+    echo "Runs per condition: $RUNS"
+    echo "Auth RTT delay requested: ${AUTH_DELAY_MS} ms"
+    echo "Started: $(date '+%Y-%m-%d %H:%M:%S %Z')"
+} > "$OUTPUT_DIR/test_metadata.txt"
+
 echo "====================================================================="
 echo "  Automated Context-Based Validity vs. Monitor Latency Testing"
 echo "====================================================================="
@@ -188,6 +217,7 @@ echo "IoTAuth Root: $IOTAUTH_DIR"
 echo "Test        : $TEST_NAME"
 echo "Auth Mode   : $AUTH_MODE"
 echo "Password    : $AUTH_PASSWORD"
+echo "Auth Delay  : ${AUTH_DELAY_MS} ms added per Auth101 round trip"
 if [ "$TEST_NAME" = "test3" ]; then
     echo "Validities  : ${TEST3_VALIDITY_PERIODS[*]} seconds"
     echo "Thresholds  : ${TEST3_THRESHOLDS[*]}"

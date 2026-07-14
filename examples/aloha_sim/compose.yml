@@ -36,6 +36,9 @@ services:
       - TEST_VALIDITY_PERIOD=${TEST_VALIDITY_PERIOD:-}
       - TEST_RUN_ITERATION=${TEST_RUN_ITERATION:-}
       - TEST_TOTAL_RUNS=${TEST_TOTAL_RUNS:-}
+      # Optional remote-Auth101 RTT emulation. The runtime entrypoint reads the
+      # Auth101 host/port from MONITOR_CONFIG and applies tc only to that flow.
+      - AUTH_NETWORK_DELAY_MS=${AUTH_NETWORK_DELAY_MS:-0}
 
   openpi_server:
     image: openpi_server

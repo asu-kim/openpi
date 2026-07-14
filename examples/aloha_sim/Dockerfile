@@ -15,7 +15,8 @@ RUN apt-get update && \
     libgl1-mesa-glx \
     libglew-dev \
     libglfw3-dev \
-    libgles2-mesa-dev
+    libgles2-mesa-dev \
+    iproute2
 ENV MUJOCO_GL=egl
 
 WORKDIR /app
@@ -39,4 +40,4 @@ RUN uv pip sync /tmp/requirements.txt /tmp/openpi-client/pyproject.toml
 RUN uv pip install cryptography
 ENV PYTHONPATH=/app:/app/src:/app/packages/openpi-client/src
 
-CMD ["/bin/bash", "-c", "source /.venv/bin/activate && python examples/aloha_sim/main.py"]
+CMD ["/bin/bash", "/app/examples/aloha_sim/run_with_auth_delay.sh"]
