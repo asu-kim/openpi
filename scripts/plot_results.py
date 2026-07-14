@@ -39,17 +39,17 @@ from pathlib import Path
 # Central sizing for figures intended to be reduced from 6 inches to one
 # approximately 3.3-inch ACM column.  An 18 pt source font renders at about
 # 10 pt after that reduction.
-STANDARD_FIGURE_SIZE = (6, 4)
-SQUARE_FIGURE_SIZE = (6, 6)
+STANDARD_FIGURE_SIZE = (6, 6)
+SQUARE_FIGURE_SIZE = (8, 8)
 BASE_FONT_SIZE = 20
-AXIS_LABEL_FONT_SIZE = 22
+AXIS_LABEL_FONT_SIZE = 26
 AXIS_TITLE_FONT_SIZE = 24
-X_TICK_LABEL_FONT_SIZE = 20
-Y_TICK_LABEL_FONT_SIZE = 20
-LEGEND_FONT_SIZE = 20
+X_TICK_LABEL_FONT_SIZE = 26
+Y_TICK_LABEL_FONT_SIZE = 26
+LEGEND_FONT_SIZE = 26
 FIGURE_TITLE_FONT_SIZE = 24
 DATA_LABEL_FONT_SIZE = 20
-X_TICK_LABEL_ROTATION = 0
+X_TICK_LABEL_ROTATION = 50
 DATA_LABEL_BOUNDARY_PADDING_POINTS = 4
 DATA_LABEL_MIN_GAP_POINTS = 4
 LAYOUT_PADDING = 0.25
@@ -1139,7 +1139,7 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
                                         xytext=(0, 12), color=color_lat))
         optimize_annotations(texts, ax=ax)
 
-        ax.set_xlabel('Motion Threshold Value (τ)', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
+        ax.set_xlabel('Motion Threshold Value, Log scale', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
         ax.set_ylabel('Average Monitor Latency (ms)', fontsize=AXIS_LABEL_FONT_SIZE, color=color_lat, labelpad=10)
         set_threshold_x_ticks(ax, x_coords, thresholds, log_x)
         if equidistant_x:
@@ -1178,7 +1178,7 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
                                         xytext=(0, 12), color=color_wc))
         optimize_annotations(texts, ax=ax)
 
-        ax.set_xlabel('Motion Threshold Value (τ)', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
+        ax.set_xlabel('Motion Threshold Value, Log scale', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
         ax.set_ylabel('Worst-Case Monitor Latency (ms)', fontsize=AXIS_LABEL_FONT_SIZE, color=color_wc, labelpad=10)
         set_threshold_x_ticks(ax, x_coords, thresholds, log_x)
         if equidistant_x:
@@ -1292,7 +1292,7 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
                                         xytext=(0, remote_offset), color='#d62728'))
         optimize_annotations(texts, ax=ax)
 
-        ax.set_xlabel('Motion Threshold Value (τ)', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
+        ax.set_xlabel('Motion Threshold Value, Log scale', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
         ax.set_ylabel('Average Monitor Latency (ms)', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
         set_threshold_x_ticks(ax, x_coords, common_t, log_x)
         if equidistant_x:
@@ -1339,7 +1339,7 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
                                         xytext=(0, remote_offset), color='#9467bd'))
         optimize_annotations(texts, ax=ax)
 
-        ax.set_xlabel('Motion Threshold Value (τ)', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
+        ax.set_xlabel('Motion Threshold Value, Log scale', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
         ax.set_ylabel('Worst-Case Monitor Latency (ms)', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
         set_threshold_x_ticks(ax, x_coords, common_t, log_x)
         if equidistant_x:
