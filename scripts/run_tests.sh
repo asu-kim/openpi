@@ -19,8 +19,8 @@ fi
 # ─────────────────────────────────────────────────────────────────────────────
 # Argument parsing
 # Usage:
-#   ./scripts/run_context_validity_tests.sh --test1 --local [--password <pw>] [--runs <n>]
-#   ./scripts/run_context_validity_tests.sh --test1 --remote [--password <pw>] [--runs <n>]
+#   ./scripts/run_tests.sh --test1|--test2|--test3 --local [--password <pw>] [--runs <n>]
+#   ./scripts/run_tests.sh --test1|--test2|--test3 --remote [--password <pw>] [--runs <n>]
 # ─────────────────────────────────────────────────────────────────────────────
 TEST_NAME=""
 AUTH_MODE=""
@@ -31,7 +31,7 @@ PLOT_ARGS=()
 
 if [ "$#" -eq 0 ]; then
     echo "❌ Error: No arguments provided."
-    echo "Usage: $0 --test1|--test2 --local|--remote [--password <pw>] [--runs <n>] [--bypass-mode still|active]"
+    echo "Usage: $0 --test1|--test2|--test3 --local|--remote [--password <pw>] [--runs <n>] [--bypass-mode still|active]"
     exit 1
 fi
 
@@ -46,8 +46,8 @@ while [[ "$#" -gt 0 ]]; do
             shift
             ;;
         --test3)
-            echo "❌ Error: --test3 is not implemented yet."
-            exit 1
+            TEST_NAME="test3"
+            shift
             ;;
         --local)
             AUTH_MODE="local"
@@ -90,7 +90,7 @@ while [[ "$#" -gt 0 ]]; do
             ;;
         *)
             echo "❌ Error: Unknown argument '$1'"
-            echo "Usage: $0 --test1|--test2 --local|--remote [--password <pw>] [--runs <n>] [--bypass-mode still|active]"
+            echo "Usage: $0 --test1|--test2|--test3 --local|--remote [--password <pw>] [--runs <n>] [--bypass-mode still|active]"
             exit 1
             ;;
     esac
@@ -98,14 +98,19 @@ done
 
 # Validate required flags
 if [ -z "$TEST_NAME" ]; then
-    echo "❌ Error: A test flag is required (e.g. --test1 or --test2)."
-    echo "Usage: $0 --test1|--test2 --local|--remote [--password <pw>] [--runs <n>] [--bypass-mode still|active]"
+    echo "❌ Error: A test flag is required (e.g. --test1, --test2, or --test3)."
+    echo "Usage: $0 --test1|--test2|--test3 --local|--remote [--password <pw>] [--runs <n>] [--bypass-mode still|active]"
     exit 1
 fi
 
 if [ -z "$AUTH_MODE" ]; then
     echo "❌ Error: An auth mode flag is required (--local or --remote)."
-    echo "Usage: $0 --test1|--test2 --local|--remote [--password <pw>] [--runs <n>] [--bypass-mode still|active]"
+    echo "Usage: $0 --test1|--test2|--test3 --local|--remote [--password <pw>] [--runs <n>] [--bypass-mode still|active]"
+    exit 1
+fi
+
+if ! [[ "$RUNS" =~ ^[1-9][0-9]*$ ]]; then
+    echo "❌ Error: --runs must be a positive integer (received '$RUNS')."
     exit 1
 fi
 
@@ -146,6 +151,19 @@ if [ ${#VALIDITY_PERIODS[@]} -eq 0 ]; then
 fi
 echo "📋 Validity periods from graph: ${VALIDITY_PERIODS[*]}s"
 
+# Test 3 intentionally uses a fixed 5x5 Cartesian grid. Its validity periods
+# must still be present in the graph because each one needs a matching config.
+TEST3_VALIDITY_PERIODS=(1 2 3 4 5)
+TEST3_THRESHOLDS=(0.0001 0.008 0.02 0.15 0.6)
+if [ "$TEST_NAME" = "test3" ]; then
+    for required_val in "${TEST3_VALIDITY_PERIODS[@]}"; do
+        if [[ " ${VALIDITY_PERIODS[*]} " != *" ${required_val} "* ]]; then
+            echo "❌ Error: Test 3 requires validity period ${required_val}s, but it is not present in $GRAPH_FILE."
+            exit 1
+        fi
+    done
+fi
+
 # Timestamped run output directory (reports + graphs + copied source data all land here)
 if [ "$TEST_NAME" = "test2" ]; then
     OUTPUT_DIR="$OPENPI_DIR/test_reports/$TEST_NAME/$AUTH_MODE/$BYPASS_MODE/$RUN_TIMESTAMP"
@@ -170,7 +188,13 @@ echo "IoTAuth Root: $IOTAUTH_DIR"
 echo "Test        : $TEST_NAME"
 echo "Auth Mode   : $AUTH_MODE"
 echo "Password    : $AUTH_PASSWORD"
-echo "Iterations  : $RUNS runs per validity period (${VALIDITY_PERIODS[*]}s)"
+if [ "$TEST_NAME" = "test3" ]; then
+    echo "Validities  : ${TEST3_VALIDITY_PERIODS[*]} seconds"
+    echo "Thresholds  : ${TEST3_THRESHOLDS[*]}"
+    echo "Iterations  : $RUNS runs per grid cell (25 cells, $((25 * RUNS)) total runs)"
+else
+    echo "Iterations  : $RUNS runs per test condition"
+fi
 echo "Output Dir  : $OUTPUT_DIR"
 echo "====================================================================="
 
@@ -268,10 +292,10 @@ else
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Step 5: Run simulation iterations across validity periods
+# Step 5: Run simulation iterations across test conditions
 # ─────────────────────────────────────────────────────────────────────────────
 echo ""
-echo "▶️  [Step 5/6] Executing Docker simulation loops across validity periods..."
+echo "▶️  [Step 5/6] Executing Docker simulation loops across test conditions..."
 cd "$OPENPI_DIR"
 
 if [ "$TEST_NAME" = "test1" ]; then
@@ -419,6 +443,83 @@ elif [ "$TEST_NAME" = "test2" ]; then
             sleep 2
         done
     done
+elif [ "$TEST_NAME" = "test3" ]; then
+    TOTAL_CELLS=$((${#TEST3_THRESHOLDS[@]} * ${#TEST3_VALIDITY_PERIODS[@]}))
+    TOTAL_SIMULATIONS=$((TOTAL_CELLS * RUNS))
+    CELL_INDEX=0
+
+    for THRESH in "${TEST3_THRESHOLDS[@]}"; do
+        for VAL in "${TEST3_VALIDITY_PERIODS[@]}"; do
+            CELL_INDEX=$((CELL_INDEX + 1))
+            echo ""
+            echo "---------------------------------------------------------------------"
+            echo "  Cell ${CELL_INDEX}/${TOTAL_CELLS}: Threshold ${THRESH} | Validity ${VAL}s"
+            echo "---------------------------------------------------------------------"
+
+            for (( RUN=1; RUN<=RUNS; RUN++ )); do
+                OVERALL_RUN=$((((CELL_INDEX - 1) * RUNS) + RUN))
+                echo ""
+                echo "🔄 [Threshold ${THRESH} | Validity ${VAL}s | Run ${RUN}/${RUNS} | Overall ${OVERALL_RUN}/${TOTAL_SIMULATIONS}] Launching simulation..."
+
+                if [ "$AUTH_MODE" = "remote" ]; then
+                    AUTH_DIR="remote_auth"
+                else
+                    AUTH_DIR="local_auth"
+                fi
+
+                HOST_CONFIG_PATH="$OPENPI_DIR/sst_config_creds/${AUTH_DIR}/testing/validity/val${VAL}/client_val_${VAL}.config"
+                CONFIG_PATH="/app/sst_config_creds/${AUTH_DIR}/testing/validity/val${VAL}/client_val_${VAL}.config"
+                if [ ! -f "$HOST_CONFIG_PATH" ]; then
+                    if [ -f "$OPENPI_DIR/sst_config_creds/${AUTH_DIR}/validity/val${VAL}/client_val_${VAL}.config" ]; then
+                        HOST_CONFIG_PATH="$OPENPI_DIR/sst_config_creds/${AUTH_DIR}/validity/val${VAL}/client_val_${VAL}.config"
+                        CONFIG_PATH="/app/sst_config_creds/${AUTH_DIR}/validity/val${VAL}/client_val_${VAL}.config"
+                    fi
+                fi
+                if [ ! -f "$HOST_CONFIG_PATH" ]; then
+                    echo "❌ Error: Client config file for validity period ${VAL}s not found on host machine at:"
+                    echo "   $HOST_CONFIG_PATH"
+                    echo "   Please ensure ${AUTH_DIR} config files are placed in sst_config_creds/${AUTH_DIR}/."
+                    exit 1
+                fi
+
+                export MONITOR_CONFIG="$CONFIG_PATH"
+                export OPENPI_MOTION_THRESHOLD="$THRESH"
+                export ALOHA_MAX_EPISODE_STEPS="${ALOHA_MAX_EPISODE_STEPS:-300}"
+                export ALOHA_NUM_EPISODES="${ALOHA_NUM_EPISODES:-1}"
+                export TEST_VALIDITY_PERIOD="$VAL"
+                export TEST_RUN_ITERATION="$RUN"
+                export TEST_TOTAL_RUNS="$RUNS"
+
+                docker compose -f examples/aloha_sim/compose.yml up --build --abort-on-container-exit
+                docker compose -f examples/aloha_sim/compose.yml down >/dev/null 2>&1 || true
+
+                LOG_DIR="$OPENPI_DIR/data/aloha_sim/token_logs"
+                LATEST_LOG="$(ls -t "$LOG_DIR"/*.jsonl 2>/dev/null | head -n 1 || true)"
+                if [ -z "$LATEST_LOG" ] || [ ! -f "$LATEST_LOG" ]; then
+                    echo "❌ Error: No .jsonl token log file generated in $LOG_DIR."
+                    exit 1
+                fi
+
+                ARCHIVED_LOG="$OUTPUT_DIR/val_${VAL}s_thresh_${THRESH}_run_${RUN}.jsonl"
+                echo "📂 Archiving source log as $(basename "$ARCHIVED_LOG")..."
+                cp "$LATEST_LOG" "$ARCHIVED_LOG"
+
+                REPORT_FILE="$OUTPUT_DIR/val_${VAL}s_thresh_${THRESH}_run_${RUN}.txt"
+                echo "📊 Analyzing latency for threshold ${THRESH}, validity ${VAL}s, run ${RUN}..."
+                python3 scripts/analyze_latency.py "$LATEST_LOG" -o "$REPORT_FILE"
+
+                if grep -i "Average Monitor Latency" "$REPORT_FILE" >/dev/null 2>&1; then
+                    LAT_VAL="$(grep -i "Average Monitor Latency" "$REPORT_FILE" | awk '{print $(NF-1)}')"
+                    echo "✅ Run ${RUN} completed -> Average Monitor Latency: ${LAT_VAL} ms"
+                else
+                    echo "❌ Error: Could not find 'Average Monitor Latency' in $REPORT_FILE."
+                    exit 1
+                fi
+
+                sleep 2
+            done
+        done
+    done
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -507,6 +608,12 @@ elif [ "$TEST_NAME" = "test2" ]; then
         echo "ℹ️  Only $AUTH_MODE Test 2 data found. Generating single-mode graphs."
         python3 scripts/plot_results.py --reports-dir "$OUTPUT_DIR" --bypass-mode "$BYPASS_MODE" "${PLOT_ARGS[@]}"
     fi
+elif [ "$TEST_NAME" = "test3" ]; then
+    echo "🌡️  Aggregating the 5x5 Test 3 grid and generating the monitor-latency heatmap..."
+    python3 scripts/plot_results.py \
+        --reports-dir "$OUTPUT_DIR" \
+        --test-name test3 \
+        "${PLOT_ARGS[@]}"
 else
     python3 scripts/plot_results.py --reports-dir "$OUTPUT_DIR" --bypass-mode "$BYPASS_MODE" "${PLOT_ARGS[@]}"
 fi

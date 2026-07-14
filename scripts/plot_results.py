@@ -5,6 +5,7 @@ plot_results.py — Standalone graph generator for openpi latency test reports
 Reads pre-generated per-run report files from a timestamped test_reports/ directory:
   - Test 1 (val_Xs_run_Y.txt): Validity vs. Average & Worst-Case Monitor Latency
   - Test 2 (thresh_X_run_Y.txt): Motion Threshold vs. Bypass Rate (%) & Latency
+  - Test 3 (val_Xs_thresh_Y_run_Z.txt): Validity/Threshold Monitor Latency Heatmap
 
 Test 1 pipeline (single source of truth):
   val_*s_run_*.txt  →  validity_vs_latency.csv  →  PNG/PDF graphs
@@ -67,6 +68,8 @@ if "MPLCONFIGDIR" not in os.environ:
 
 # Try importing matplotlib; if unavailable, attempt re-launch with a known venv.
 try:
+    import matplotlib
+    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     import matplotlib.patheffects as path_effects
     MATPLOTLIB_AVAILABLE = True
@@ -88,7 +91,10 @@ except ImportError:
         Path("/Users/krutyanjayshinde/Desktop/OPT_project/iotauth/entity/yolo_entity/.venv/bin/python"),
     ]
     for venv_py in known_venvs:
-        if venv_py.exists() and str(venv_py.resolve()) != str(Path(sys.executable).resolve()):
+        # Compare executable paths without resolving symlinks. A virtualenv's
+        # Python often resolves to the same base interpreter as system Python,
+        # but it still has a different site-packages environment.
+        if venv_py.exists() and str(venv_py.absolute()) != os.path.abspath(sys.executable):
             try:
                 res = subprocess.run([str(venv_py), "-c", "import matplotlib"], capture_output=True)
                 if res.returncode == 0:
@@ -497,6 +503,15 @@ def save_plot(fig, output_path: Path, aspect_1_1: bool = False):
 
 def print_plot_options(test_name: str, output_dir: Path, options: dict,
                        show_active: bool = False, show_still: bool = False):
+    if test_name == "test3":
+        print(f"📐 {test_name.upper()} heatmap configuration for this run:")
+        print("   X-axis : categorical validity periods")
+        print("   Y-axis : categorical motion thresholds")
+        print("   Color  : average monitor latency (ms)")
+        print(f"   Title  : {'hidden' if options['no_title'] else 'shown'}")
+        print(f"   Output : {output_dir}")
+        return
+
     x_scale = "equidistant" if options["equidistant_x"] else (
         "logarithmic" if options["log_x"] else "linear"
     )
@@ -1427,6 +1442,284 @@ def generate_test2_plots_and_reports(thresholds: list, results: dict, worst_case
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Test 3: Validity Period x Motion Threshold Monitor-Latency Heatmap
+# ─────────────────────────────────────────────────────────────────────────────
+
+TEST3_CSV_NAME = "validity_threshold_latency.csv"
+TEST3_EXPECTED_VALIDITIES = {1.0, 2.0, 3.0, 4.0, 5.0}
+TEST3_EXPECTED_THRESHOLDS = {0.0001, 0.008, 0.02, 0.15, 0.6}
+TEST3_REPORT_PATTERN = re.compile(
+    r"val_(\d+(?:\.\d+)?)s_thresh_(\d+(?:\.\d+)?)_run_(\d+)\.txt",
+    re.IGNORECASE,
+)
+
+
+def validate_test3_axes(validities, thresholds) -> None:
+    validity_set = set(validities)
+    threshold_set = set(thresholds)
+    if (validity_set == TEST3_EXPECTED_VALIDITIES
+            and threshold_set == TEST3_EXPECTED_THRESHOLDS):
+        return
+
+    missing_validities = sorted(TEST3_EXPECTED_VALIDITIES - validity_set)
+    unexpected_validities = sorted(validity_set - TEST3_EXPECTED_VALIDITIES)
+    missing_thresholds = sorted(TEST3_EXPECTED_THRESHOLDS - threshold_set)
+    unexpected_thresholds = sorted(threshold_set - TEST3_EXPECTED_THRESHOLDS)
+    raise ValueError(
+        "Test 3 requires the complete fixed 5x5 grid. "
+        f"Missing validities={missing_validities or 'none'}, "
+        f"unexpected validities={unexpected_validities or 'none'}, "
+        f"missing thresholds={missing_thresholds or 'none'}, "
+        f"unexpected thresholds={unexpected_thresholds or 'none'}."
+    )
+
+
+def discover_test3_reports(reports_dir: Path) -> tuple[list, list, int, dict]:
+    """Load a complete rectangular Test 3 report grid, failing on missing data."""
+    report_files = sorted(reports_dir.glob("val_*s_thresh_*_run_*.txt"))
+    discovered = {}
+    validities = set()
+    thresholds = set()
+
+    for report_file in report_files:
+        match = TEST3_REPORT_PATTERN.fullmatch(report_file.name)
+        if not match:
+            continue
+        validity = float(match.group(1))
+        threshold = float(match.group(2))
+        run = int(match.group(3))
+        key = (validity, threshold, run)
+        if key in discovered:
+            print(f"❌ Error: Duplicate Test 3 report for validity={validity}s, "
+                  f"threshold={threshold}, run={run}.")
+            sys.exit(1)
+        discovered[key] = report_file
+        validities.add(validity)
+        thresholds.add(threshold)
+
+    if not discovered:
+        print(f"❌ Error: No val_*s_thresh_*_run_*.txt files found in {reports_dir}")
+        sys.exit(1)
+
+    try:
+        validate_test3_axes(validities, thresholds)
+    except ValueError as error:
+        print(f"❌ Error: {error}")
+        sys.exit(1)
+
+    sorted_validities = sorted(validities)
+    sorted_thresholds = sorted(thresholds)
+    max_run = max(run for _, _, run in discovered)
+    expected_runs = set(range(1, max_run + 1))
+    errors = []
+
+    for threshold in sorted_thresholds:
+        for validity in sorted_validities:
+            actual_runs = {
+                run for val, thresh, run in discovered
+                if val == validity and thresh == threshold
+            }
+            missing = sorted(expected_runs - actual_runs)
+            extra = sorted(actual_runs - expected_runs)
+            if missing or extra:
+                errors.append(
+                    f"validity={validity:g}s, threshold={threshold:g}: "
+                    f"missing runs={missing or 'none'}, extra runs={extra or 'none'}"
+                )
+
+    if errors:
+        print("❌ Error: Test 3 report grid is incomplete:")
+        for error in errors:
+            print(f"   - {error}")
+        sys.exit(1)
+
+    results = {(validity, threshold): []
+               for threshold in sorted_thresholds
+               for validity in sorted_validities}
+    latency_pattern = re.compile(
+        r"Average Monitor Latency:\s*([\d.]+)\s*ms", re.IGNORECASE
+    )
+    for threshold in sorted_thresholds:
+        for validity in sorted_validities:
+            for run in range(1, max_run + 1):
+                report_file = discovered[(validity, threshold, run)]
+                match = latency_pattern.search(report_file.read_text())
+                if not match:
+                    print("❌ Error: 'Average Monitor Latency' was not found in "
+                          f"{report_file}")
+                    sys.exit(1)
+                latency = float(match.group(1))
+                results[(validity, threshold)].append(latency)
+                print(f"✅ Loaded {report_file.name} -> avg: {latency:.2f} ms")
+
+    print("🔍 Auto-discovered Test 3: "
+          f"validities={[f'{value:g}' for value in sorted_validities]}s, "
+          f"thresholds={[f'{value:g}' for value in sorted_thresholds]}, "
+          f"runs={max_run} per cell")
+    return sorted_validities, sorted_thresholds, max_run, results
+
+
+def write_test3_csv(validities: list, thresholds: list, run_count: int,
+                    averages: dict, output_dir: Path) -> Path:
+    csv_path = output_dir / TEST3_CSV_NAME
+    with open(csv_path, "w") as csv_file:
+        csv_file.write(
+            "Validity_s,Threshold,Run_Count,Average_Monitor_Latency_ms\n"
+        )
+        for threshold in thresholds:
+            for validity in validities:
+                csv_file.write(
+                    f"{validity:g},{threshold:.10g},{run_count},"
+                    f"{averages[(validity, threshold)]:.4f}\n"
+                )
+    print(f"📊 CSV saved to: {csv_path}")
+    return csv_path
+
+
+def read_test3_csv(csv_path: Path) -> tuple[list, list, dict, dict]:
+    validities = set()
+    thresholds = set()
+    run_counts = {}
+    averages = {}
+
+    with open(csv_path) as csv_file:
+        header = csv_file.readline().strip().split(",")
+        expected_header = [
+            "Validity_s", "Threshold", "Run_Count",
+            "Average_Monitor_Latency_ms",
+        ]
+        if header != expected_header:
+            raise ValueError(
+                f"Unexpected Test 3 CSV header in {csv_path}: {header}"
+            )
+        for line_number, line in enumerate(csv_file, start=2):
+            line = line.strip()
+            if not line:
+                continue
+            parts = line.split(",")
+            if len(parts) != 4:
+                raise ValueError(
+                    f"Invalid Test 3 CSV row at {csv_path}:{line_number}"
+                )
+            validity = float(parts[0])
+            threshold = float(parts[1])
+            key = (validity, threshold)
+            if key in averages:
+                raise ValueError(f"Duplicate Test 3 CSV cell {key} in {csv_path}")
+            validities.add(validity)
+            thresholds.add(threshold)
+            run_counts[key] = int(parts[2])
+            averages[key] = float(parts[3])
+
+    sorted_validities = sorted(validities)
+    sorted_thresholds = sorted(thresholds)
+    validate_test3_axes(sorted_validities, sorted_thresholds)
+    expected_cells = {
+        (validity, threshold)
+        for threshold in sorted_thresholds
+        for validity in sorted_validities
+    }
+    missing_cells = expected_cells - set(averages)
+    if missing_cells:
+        missing_text = ", ".join(
+            f"({validity:g}s, {threshold:g})"
+            for validity, threshold in sorted(missing_cells)
+        )
+        raise ValueError(f"Test 3 CSV is missing cells: {missing_text}")
+
+    return sorted_validities, sorted_thresholds, run_counts, averages
+
+
+def plot_test3_heatmap(csv_path: Path, output_dir: Path, auth_mode: str,
+                       no_title: bool = False) -> None:
+    if not MATPLOTLIB_AVAILABLE:
+        print("\n⚠️  Warning: matplotlib is not available — heatmap skipped.")
+        return
+
+    validities, thresholds, _, averages = read_test3_csv(csv_path)
+    matrix = [
+        [averages[(validity, threshold)] for validity in validities]
+        for threshold in thresholds
+    ]
+
+    fig, ax = plt.subplots(figsize=(7.5, 6.2), dpi=300)
+    image = ax.imshow(matrix, cmap="viridis", aspect="equal")
+    ax.set_xticks(range(len(validities)))
+    ax.set_xticklabels(
+        [f"{validity:g}s" for validity in validities], fontsize=16
+    )
+    ax.set_yticks(range(len(thresholds)))
+    ax.set_yticklabels(
+        [f"{threshold:.10g}" for threshold in thresholds], fontsize=16
+    )
+    ax.set_xlabel("Relative Validity Period (seconds)", fontsize=18)
+    ax.set_ylabel("Motion Threshold", fontsize=18)
+
+    color_min, color_max = image.get_clim()
+    color_midpoint = color_min + (color_max - color_min) * 0.55
+    for row_index, threshold in enumerate(thresholds):
+        for column_index, validity in enumerate(validities):
+            value = averages[(validity, threshold)]
+            text_color = "white" if value <= color_midpoint else "black"
+            ax.text(
+                column_index, row_index, f"{value:.2f}",
+                ha="center", va="center", color=text_color,
+                fontsize=12, fontweight="bold",
+            )
+
+    colorbar = fig.colorbar(image, ax=ax, fraction=0.046, pad=0.04)
+    colorbar.set_label("Average Monitor Latency (ms)", fontsize=18)
+    colorbar.ax.tick_params(labelsize=14)
+    if not no_title:
+        fig.suptitle(
+            f"TEST3 Monitor Latency Heatmap — {auth_mode.capitalize()} Auth",
+            fontsize=18, fontweight="bold", y=0.98,
+        )
+    fig.tight_layout(rect=(0, 0, 1, 0.95) if not no_title else None,
+                     pad=LAYOUT_PADDING)
+
+    file_stem = f"test3_{auth_mode}_validity_threshold_latency_heatmap"
+    save_plot(fig, output_dir / f"{file_stem}.png")
+    save_plot(fig, output_dir / f"{file_stem}.pdf")
+    plt.close(fig)
+    print(f"🌡️  Heatmap saved to: {output_dir / file_stem}.png / .pdf")
+
+
+def generate_test3_outputs(validities: list, thresholds: list, run_count: int,
+                           results: dict, output_dir: Path, auth_mode: str,
+                           no_title: bool = False) -> Path:
+    averages = {
+        key: sum(run_latencies) / len(run_latencies)
+        for key, run_latencies in results.items()
+    }
+
+    report_path = output_dir / "validity_threshold_latency_report.txt"
+    with open(report_path, "w") as report_file:
+        report_file.write("VALIDITY PERIOD x MOTION THRESHOLD LATENCY REPORT\n")
+        report_file.write("=================================================\n")
+        report_file.write(f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+        report_file.write(f"Runs per cell: {run_count}\n\n")
+        report_file.write(
+            f"{'Validity (s)':>12} | {'Threshold':>12} | "
+            f"{'Runs':>6} | {'Average Monitor Latency (ms)':>28}\n"
+        )
+        report_file.write("-" * 69 + "\n")
+        for threshold in thresholds:
+            for validity in validities:
+                report_file.write(
+                    f"{validity:>12g} | {threshold:>12.10g} | "
+                    f"{run_count:>6} | {averages[(validity, threshold)]:>28.4f}\n"
+                )
+    print(f"📄 Text report saved to: {report_path}")
+
+    csv_path = write_test3_csv(
+        validities, thresholds, run_count, averages, output_dir
+    )
+    plot_test3_heatmap(csv_path, output_dir, auth_mode, no_title=no_title)
+    return csv_path
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Main Orchestration
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -1444,8 +1737,8 @@ def main():
         help="Where to write the CSV, text report, and graph. Defaults to --reports-dir."
     )
     parser.add_argument(
-        "--test-name", default=None, choices=["test1", "test2", None],
-        help="Test identifier for plot title and output filename (test1 or test2). "
+        "--test-name", default=None, choices=["test1", "test2", "test3", None],
+        help="Test identifier for plot title and output filename (test1, test2, or test3). "
              "Auto-inferred from the reports-dir path if not specified."
     )
     parser.add_argument(
@@ -1516,19 +1809,35 @@ def main():
         args.bypass_mode = inferred_bypass
         print(f"🔍 Auto-inferred bypass mode: {args.bypass_mode}")
 
+    # Test 3 has the most specific filename pattern, so detect it before the
+    # one-dimensional Test 1 and Test 2 report formats.
+    is_test3 = (
+        test_name.lower() == "test3"
+        or bool(list(reports_dir.glob("val_*s_thresh_*_run_*.txt")))
+        or (reports_dir / TEST3_CSV_NAME).is_file()
+        or (output_dir / TEST3_CSV_NAME).is_file()
+    )
+    if is_test3:
+        test_name = "test3"
+
     # Check if there are any Test 2 reports (thresh_*_run_*.txt) or explicitly requested test2
     is_test2 = (
-        test_name.lower() == "test2"
-        or bool(list(reports_dir.glob("thresh_*_run_*.txt")))
-        or (reports_dir / TEST2_CSV_NAME).is_file()
-        or (output_dir / TEST2_CSV_NAME).is_file()
+        not is_test3
+        and (
+            test_name.lower() == "test2"
+            or bool(list(reports_dir.glob("thresh_*_run_*.txt")))
+            or (reports_dir / TEST2_CSV_NAME).is_file()
+            or (output_dir / TEST2_CSV_NAME).is_file()
+        )
     )
     if is_test2:
         test_name = "test2"
 
     if is_test2 and args.equidistant_x and args.log_x:
         parser.error("--equidistant-x and --log-x cannot be used together")
-    if not is_test2 and args.log_x:
+    if is_test3 and (args.equidistant_x or args.log_x or args.log_y):
+        print("ℹ️  Ignoring axis-spacing options for Test 3; both heatmap axes are categorical.")
+    elif not is_test2 and args.log_x:
         print("ℹ️  Ignoring --log-x for Test 1; its validity-period x-axis is always linear.")
 
     plot_options = {
@@ -1536,24 +1845,63 @@ def main():
         "aspect_1_1": args.aspect_1_1,
         "no_title": args.no_title,
         "log_x": args.log_x if is_test2 else False,
-        "log_y": args.log_y,
+        "log_y": args.log_y if not is_test3 else False,
     }
     print_plot_options(
         test_name, output_dir, plot_options,
         show_active=args.show_active_rate, show_still=args.show_still_rate
     )
 
-    compare_csv = Path(args.compare_csv).resolve() if args.compare_csv else discover_compare_csv(
-        reports_dir, test_name, auth_mode, args.bypass_mode
-    )
-    if compare_csv and not args.compare_csv:
-        print(f"🔍 Auto-discovered comparison CSV: {compare_csv}")
-    elif not compare_csv and not args.compare_csv:
-        other_mode = "remote" if auth_mode == "local" else "local"
-        print(f"ℹ️  No completed {other_mode} comparison run was found; "
-              "only single-mode graphs will be generated.")
+    if is_test3:
+        if args.compare_csv:
+            parser.error("--compare-csv is not supported for Test 3 heatmaps")
+        compare_csv = None
+    else:
+        compare_csv = Path(args.compare_csv).resolve() if args.compare_csv else discover_compare_csv(
+            reports_dir, test_name, auth_mode, args.bypass_mode
+        )
+        if compare_csv and not args.compare_csv:
+            print(f"🔍 Auto-discovered comparison CSV: {compare_csv}")
+        elif not compare_csv and not args.compare_csv:
+            other_mode = "remote" if auth_mode == "local" else "local"
+            print(f"ℹ️  No completed {other_mode} comparison run was found; "
+                  "only single-mode graphs will be generated.")
 
-    if is_test2:
+    if is_test3:
+        primary_csv = find_existing_summary_csv(
+            reports_dir, output_dir, TEST3_CSV_NAME
+        )
+        if primary_csv:
+            print(f"♻️  Existing Test 3 CSV found: {primary_csv}")
+            print("   Skipping report aggregation and CSV generation.")
+            try:
+                plot_test3_heatmap(
+                    primary_csv, output_dir, auth_mode,
+                    no_title=args.no_title,
+                )
+            except ValueError as error:
+                print(f"❌ Error reading Test 3 CSV: {error}")
+                sys.exit(1)
+        else:
+            validities, thresholds, runs, results = discover_test3_reports(
+                reports_dir
+            )
+            print("=" * 80)
+            print("AGGREGATING TEST 3 REPORTS & GENERATING LATENCY HEATMAP")
+            print("=" * 80)
+            print(f"Reports dir : {reports_dir}")
+            print(f"Output dir  : {output_dir}")
+            print(f"Validities  : {[f'{value:g}' for value in validities]} seconds")
+            print(f"Thresholds  : {[f'{value:g}' for value in thresholds]}")
+            print(f"Runs        : {runs} per grid cell")
+            print(f"Grid        : {len(validities)} x {len(thresholds)}")
+            print(f"Test / Mode : {test_name} / {auth_mode}")
+            print("=" * 80)
+            generate_test3_outputs(
+                validities, thresholds, runs, results, output_dir, auth_mode,
+                no_title=args.no_title,
+            )
+    elif is_test2:
         primary_csv = find_existing_summary_csv(reports_dir, output_dir, TEST2_CSV_NAME)
         if primary_csv:
             print(f"♻️  Existing Test 2 CSV found: {primary_csv}")
