@@ -278,16 +278,9 @@ def keep_data_labels_inside_axes(fig):
         fig.canvas.draw()
 
 
-LEGEND_CANDIDATE_LOCATIONS = (
-    "upper right",
-    "upper left",
-    "lower right",
-    "lower left",
-    "center right",
-    "center left",
-    "upper center",
-    "lower center",
-)
+LEGEND_LOCATION = "upper right"
+LEGEND_CLEARANCE_GROWTH = 1.15
+LEGEND_CLEARANCE_MAX_PASSES = 8
 
 
 def _bbox_overlap_area(first, second) -> float:
@@ -343,7 +336,7 @@ def _legend_collision_score(fig, legend, owner_ax) -> float:
 
 
 def add_collision_aware_legend(ax, handles=None, labels=None):
-    """Add a legend whose final location is selected during layout."""
+    """Add an upper-right legend whose clearance is resolved during layout."""
     kwargs = {
         "frameon": True,
         "facecolor": "white",
@@ -352,12 +345,29 @@ def add_collision_aware_legend(ax, handles=None, labels=None):
     }
     ax._collision_legend_spec = (handles, labels, kwargs)
     if handles is None:
-        return ax.legend(loc="best", **kwargs)
-    return ax.legend(handles, labels, loc="best", **kwargs)
+        return ax.legend(loc=LEGEND_LOCATION, **kwargs)
+    return ax.legend(handles, labels, loc=LEGEND_LOCATION, **kwargs)
+
+
+def _expand_shared_y_limits(fig, owner_ax):
+    """Add headroom on an axes and any twin axes sharing its plot rectangle."""
+    owner_box = owner_ax.get_position()
+    for ax in fig.axes:
+        if _bbox_overlap_area(owner_box, ax.get_position()) <= 0:
+            continue
+
+        lower, upper = ax.get_ylim()
+        if upper <= lower:
+            continue
+        if ax.get_yscale() == "log":
+            ax.set_ylim(lower, upper * LEGEND_CLEARANCE_GROWTH)
+        else:
+            span = upper - lower
+            ax.set_ylim(lower, lower + span * LEGEND_CLEARANCE_GROWTH)
 
 
 def position_collision_aware_legends(fig):
-    """Choose the least obstructive in-axes location for every plot legend."""
+    """Keep legends upper-right and create headroom until content clears them."""
     for ax in fig.axes:
         spec = getattr(ax, "_collision_legend_spec", None)
         if spec is None:
@@ -368,57 +378,19 @@ def position_collision_aware_legends(fig):
         if existing is not None:
             existing.remove()
 
-        best_location = LEGEND_CANDIDATE_LOCATIONS[0]
-        best_score = float("inf")
-        for location in LEGEND_CANDIDATE_LOCATIONS:
-            if handles is None:
-                candidate = ax.legend(loc=location, **kwargs)
-            else:
-                candidate = ax.legend(handles, labels, loc=location, **kwargs)
-            fig.canvas.draw()
-            score = _legend_collision_score(fig, candidate, ax)
-            candidate.remove()
-            if score < best_score:
-                best_score = score
-                best_location = location
-
-        if best_score > 0 and not ax.get_box_aspect():
-            # Dense plots sometimes have no clean in-axes corner.  In that
-            # case, use the space immediately above the axes rather than
-            # hiding a line, marker, or numeric label.
-            if handles is None:
-                resolved_handles, resolved_labels = ax.get_legend_handles_labels()
-            else:
-                resolved_handles, resolved_labels = handles, labels
-            outside_kwargs = dict(kwargs)
-            legend = None
-            # Prefer two columns only when they fit over the axes; otherwise a
-            # narrower one-column legend preserves the intended figure width.
-            for column_count in range(min(2, max(1, len(resolved_labels))), 0, -1):
-                outside_kwargs["ncol"] = column_count
-                legend = ax.legend(
-                    resolved_handles,
-                    resolved_labels,
-                    loc="lower center",
-                    bbox_to_anchor=(0.5, 1.015),
-                    borderaxespad=0,
-                    **outside_kwargs,
-                )
-                fig.canvas.draw()
-                renderer = fig.canvas.get_renderer()
-                if legend.get_window_extent(renderer).width <= ax.get_window_extent(renderer).width:
-                    break
-                legend.remove()
-            if fig._suptitle is not None:
-                legend_box = legend.get_window_extent(fig.canvas.get_renderer())
-                legend_top = fig.transFigure.inverted().transform(
-                    (legend_box.x1, legend_box.y1)
-                )[1]
-                fig._suptitle.set_y(legend_top + 0.015)
-        elif handles is None:
-            ax.legend(loc=best_location, **kwargs)
+        if handles is None:
+            legend = ax.legend(loc=LEGEND_LOCATION, **kwargs)
         else:
-            ax.legend(handles, labels, loc=best_location, **kwargs)
+            legend = ax.legend(handles, labels, loc=LEGEND_LOCATION, **kwargs)
+
+        for _ in range(LEGEND_CLEARANCE_MAX_PASSES):
+            fig.canvas.draw()
+            if _legend_collision_score(fig, legend, ax) == 0:
+                break
+            _expand_shared_y_limits(fig, ax)
+            keep_data_labels_inside_axes(fig)
+            separate_close_data_labels(fig)
+            keep_data_labels_inside_axes(fig)
     fig.canvas.draw()
 
 
