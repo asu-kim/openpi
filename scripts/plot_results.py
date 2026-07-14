@@ -40,14 +40,15 @@ from pathlib import Path
 # 10 pt after that reduction.
 STANDARD_FIGURE_SIZE = (6, 4)
 SQUARE_FIGURE_SIZE = (6, 6)
-BASE_FONT_SIZE = 18
-AXIS_LABEL_FONT_SIZE = 20
-AXIS_TITLE_FONT_SIZE = 22
-X_TICK_LABEL_FONT_SIZE = 18
-Y_TICK_LABEL_FONT_SIZE = 18
-LEGEND_FONT_SIZE = 18
-FIGURE_TITLE_FONT_SIZE = 22
-DATA_LABEL_FONT_SIZE = 18
+BASE_FONT_SIZE = 20
+AXIS_LABEL_FONT_SIZE = 22
+AXIS_TITLE_FONT_SIZE = 24
+X_TICK_LABEL_FONT_SIZE = 20
+Y_TICK_LABEL_FONT_SIZE = 20
+LEGEND_FONT_SIZE = 20
+FIGURE_TITLE_FONT_SIZE = 24
+DATA_LABEL_FONT_SIZE = 20
+X_TICK_LABEL_ROTATION = 0
 DATA_LABEL_BOUNDARY_PADDING_POINTS = 4
 DATA_LABEL_MIN_GAP_POINTS = 4
 LAYOUT_PADDING = 0.25
@@ -445,8 +446,11 @@ def set_threshold_x_ticks(ax, x_coords: list, thresholds: list,
     ax.set_xticklabels(
         labels,
         fontsize=X_TICK_LABEL_FONT_SIZE,
-        rotation=20 if log_x else 0,
-        ha="right" if log_x else "center",
+        rotation=X_TICK_LABEL_ROTATION,
+        ha="right" if X_TICK_LABEL_ROTATION > 0 else (
+            "left" if X_TICK_LABEL_ROTATION < 0 else "center"
+        ),
+        rotation_mode="anchor",
     )
 
 
@@ -665,7 +669,15 @@ def _plot_single_mode(validities: list, avg_latencies: list, wc_latencies: list,
         if not log_y:
             set_latency_y_limits(ax1, avg_latencies)
         ax1.set_xticks(x_coords)
-        ax1.set_xticklabels(x_labels, fontsize=X_TICK_LABEL_FONT_SIZE)
+        ax1.set_xticklabels(
+            x_labels,
+            fontsize=X_TICK_LABEL_FONT_SIZE,
+            rotation=X_TICK_LABEL_ROTATION,
+            ha="right" if X_TICK_LABEL_ROTATION > 0 else (
+                "left" if X_TICK_LABEL_ROTATION < 0 else "center"
+            ),
+            rotation_mode="anchor",
+        )
         if equidistant_x:
             set_equidistant_x_limits(ax1, len(x_coords))
         ax1.grid(True, linestyle='--', alpha=0.4)
@@ -846,7 +858,15 @@ def generate_comparative_plots(local_csv: Path, remote_csv: Path,
         ax.set_xlabel('Relative Validity Period (seconds)', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
         ax.set_ylabel('Average Monitor Latency (ms)', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
         ax.set_xticks(x_coords)
-        ax.set_xticklabels(x_labels, fontsize=X_TICK_LABEL_FONT_SIZE)
+        ax.set_xticklabels(
+            x_labels,
+            fontsize=X_TICK_LABEL_FONT_SIZE,
+            rotation=X_TICK_LABEL_ROTATION,
+            ha="right" if X_TICK_LABEL_ROTATION > 0 else (
+                "left" if X_TICK_LABEL_ROTATION < 0 else "center"
+            ),
+            rotation_mode="anchor",
+        )
         if equidistant_x:
             set_equidistant_x_limits(ax, len(x_coords))
         if not log_y:
@@ -893,7 +913,15 @@ def generate_comparative_plots(local_csv: Path, remote_csv: Path,
         ax.set_xlabel('Relative Validity Period (seconds)', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
         ax.set_ylabel('Worst-Case Monitor Latency (ms)', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
         ax.set_xticks(x_coords)
-        ax.set_xticklabels(x_labels, fontsize=X_TICK_LABEL_FONT_SIZE)
+        ax.set_xticklabels(
+            x_labels,
+            fontsize=X_TICK_LABEL_FONT_SIZE,
+            rotation=X_TICK_LABEL_ROTATION,
+            ha="right" if X_TICK_LABEL_ROTATION > 0 else (
+                "left" if X_TICK_LABEL_ROTATION < 0 else "center"
+            ),
+            rotation_mode="anchor",
+        )
         if equidistant_x:
             set_equidistant_x_limits(ax, len(x_coords))
         if not log_y:
