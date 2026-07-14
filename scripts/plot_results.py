@@ -35,17 +35,24 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-# Central font configuration for every generated graph.
-BASE_FONT_SIZE = 12
-AXIS_LABEL_FONT_SIZE = 14
-AXIS_TITLE_FONT_SIZE = 16
-X_TICK_LABEL_FONT_SIZE = 13
-Y_TICK_LABEL_FONT_SIZE = 13
-LEGEND_FONT_SIZE = 12
-FIGURE_TITLE_FONT_SIZE = 16
-DATA_LABEL_FONT_SIZE = 16
+# Central sizing for figures intended to be reduced from 6 inches to one
+# approximately 3.3-inch ACM column.  An 18 pt source font renders at about
+# 10 pt after that reduction.
+STANDARD_FIGURE_SIZE = (6, 4)
+SQUARE_FIGURE_SIZE = (6, 6)
+BASE_FONT_SIZE = 18
+AXIS_LABEL_FONT_SIZE = 20
+AXIS_TITLE_FONT_SIZE = 22
+X_TICK_LABEL_FONT_SIZE = 18
+Y_TICK_LABEL_FONT_SIZE = 18
+LEGEND_FONT_SIZE = 18
+FIGURE_TITLE_FONT_SIZE = 22
+DATA_LABEL_FONT_SIZE = 18
 DATA_LABEL_BOUNDARY_PADDING_POINTS = 4
 DATA_LABEL_MIN_GAP_POINTS = 4
+LAYOUT_PADDING = 0.25
+EXPORT_PADDING_INCHES = 0.03
+EQUIDISTANT_X_MARGIN = 0.12
 
 # Ensure MPLCONFIGDIR is set to a writable temporary directory to avoid permission errors on restricted/shared workstations
 if "MPLCONFIGDIR" not in os.environ:
@@ -271,9 +278,165 @@ def keep_data_labels_inside_axes(fig):
         fig.canvas.draw()
 
 
+LEGEND_CANDIDATE_LOCATIONS = (
+    "upper right",
+    "upper left",
+    "lower right",
+    "lower left",
+    "center right",
+    "center left",
+    "upper center",
+    "lower center",
+)
+
+
+def _bbox_overlap_area(first, second) -> float:
+    """Return the overlap area of two display-coordinate bounding boxes."""
+    width = max(0.0, min(first.x1, second.x1) - max(first.x0, second.x0))
+    height = max(0.0, min(first.y1, second.y1) - max(first.y0, second.y0))
+    return width * height
+
+
+def _legend_collision_score(fig, legend, owner_ax) -> float:
+    """Score overlap with plotted lines, markers, and rendered data labels."""
+    renderer = fig.canvas.get_renderer()
+    # Treat a small halo around the legend as occupied so it does not merely
+    # touch a line or label.
+    legend_box = legend.get_window_extent(renderer).expanded(1.06, 1.10)
+    score = 0.0
+
+    owner_box = owner_ax.get_position()
+    for ax in fig.axes:
+        # Include twin axes, but ignore unrelated subplots.
+        ax_box = ax.get_position()
+        if _bbox_overlap_area(owner_box, ax_box) <= 0:
+            continue
+
+        for label in ax.texts:
+            if label.get_gid() != "data-label" or not label.get_visible():
+                continue
+            overlap = _bbox_overlap_area(legend_box, label.get_window_extent(renderer))
+            if overlap:
+                # Covering a value label is the most expensive placement.
+                score += 1_000_000 + overlap
+
+        for line in ax.lines:
+            if not line.get_visible() or len(line.get_xdata()) == 0:
+                continue
+            display_path = line.get_path().transformed(line.get_transform())
+            if display_path.intersects_bbox(legend_box, filled=False):
+                score += 10_000
+
+            # Explicitly count marker centers inside the legend.  This also
+            # catches short/discontinuous paths that intersection tests miss.
+            vertices = display_path.vertices
+            if len(vertices):
+                inside = (
+                    (vertices[:, 0] >= legend_box.x0)
+                    & (vertices[:, 0] <= legend_box.x1)
+                    & (vertices[:, 1] >= legend_box.y0)
+                    & (vertices[:, 1] <= legend_box.y1)
+                )
+                score += 25_000 * int(inside.sum())
+
+    return score
+
+
+def add_collision_aware_legend(ax, handles=None, labels=None):
+    """Add a legend whose final location is selected during layout."""
+    kwargs = {
+        "frameon": True,
+        "facecolor": "white",
+        "framealpha": 0.9,
+        "fontsize": LEGEND_FONT_SIZE,
+    }
+    ax._collision_legend_spec = (handles, labels, kwargs)
+    if handles is None:
+        return ax.legend(loc="best", **kwargs)
+    return ax.legend(handles, labels, loc="best", **kwargs)
+
+
+def position_collision_aware_legends(fig):
+    """Choose the least obstructive in-axes location for every plot legend."""
+    for ax in fig.axes:
+        spec = getattr(ax, "_collision_legend_spec", None)
+        if spec is None:
+            continue
+
+        handles, labels, kwargs = spec
+        existing = ax.get_legend()
+        if existing is not None:
+            existing.remove()
+
+        best_location = LEGEND_CANDIDATE_LOCATIONS[0]
+        best_score = float("inf")
+        for location in LEGEND_CANDIDATE_LOCATIONS:
+            if handles is None:
+                candidate = ax.legend(loc=location, **kwargs)
+            else:
+                candidate = ax.legend(handles, labels, loc=location, **kwargs)
+            fig.canvas.draw()
+            score = _legend_collision_score(fig, candidate, ax)
+            candidate.remove()
+            if score < best_score:
+                best_score = score
+                best_location = location
+
+        if best_score > 0 and not ax.get_box_aspect():
+            # Dense plots sometimes have no clean in-axes corner.  In that
+            # case, use the space immediately above the axes rather than
+            # hiding a line, marker, or numeric label.
+            if handles is None:
+                resolved_handles, resolved_labels = ax.get_legend_handles_labels()
+            else:
+                resolved_handles, resolved_labels = handles, labels
+            outside_kwargs = dict(kwargs)
+            legend = None
+            # Prefer two columns only when they fit over the axes; otherwise a
+            # narrower one-column legend preserves the intended figure width.
+            for column_count in range(min(2, max(1, len(resolved_labels))), 0, -1):
+                outside_kwargs["ncol"] = column_count
+                legend = ax.legend(
+                    resolved_handles,
+                    resolved_labels,
+                    loc="lower center",
+                    bbox_to_anchor=(0.5, 1.015),
+                    borderaxespad=0,
+                    **outside_kwargs,
+                )
+                fig.canvas.draw()
+                renderer = fig.canvas.get_renderer()
+                if legend.get_window_extent(renderer).width <= ax.get_window_extent(renderer).width:
+                    break
+                legend.remove()
+            if fig._suptitle is not None:
+                legend_box = legend.get_window_extent(fig.canvas.get_renderer())
+                legend_top = fig.transFigure.inverted().transform(
+                    (legend_box.x1, legend_box.y1)
+                )[1]
+                fig._suptitle.set_y(legend_top + 0.015)
+        elif handles is None:
+            ax.legend(loc=best_location, **kwargs)
+        else:
+            ax.legend(handles, labels, loc=best_location, **kwargs)
+    fig.canvas.draw()
+
+
 LOG_X_ZERO_FLOOR = 0.001
-LATENCY_Y_HEADROOM_FACTOR = 1.05
+LATENCY_Y_HEADROOM_FACTOR = 1.12
 COMPARISON_LABEL_OVERLAP_FRACTION = 0.04
+
+
+def set_latency_y_limits(ax, values: list):
+    """Use the data range instead of forcing an often mostly-empty 20 ms axis."""
+    maximum = max((float(value) for value in values), default=0.0)
+    ax.set_ylim(0, maximum * LATENCY_Y_HEADROOM_FACTOR if maximum > 0 else 1)
+
+
+def set_equidistant_x_limits(ax, point_count: int):
+    """Keep end points close to the axes while labels remain inside the box."""
+    if point_count:
+        ax.set_xlim(-EQUIDISTANT_X_MARGIN, point_count - 1 + EQUIDISTANT_X_MARGIN)
 
 
 def get_comparison_label_offsets(first_value: float, second_value: float,
@@ -337,14 +500,15 @@ def apply_log_scales(ax, x_values: list, y_values: list,
 
 
 def finalize_plot_layout(fig, aspect_1_1: bool = False):
-    """Lay out the figure while reserving room for labels on square plots."""
+    """Tightly lay out labels, then place legends away from plotted content."""
     if aspect_1_1:
-        fig.tight_layout(rect=(0, 0.08, 1, 1))
+        fig.tight_layout(rect=(0, 0.03, 1, 1), pad=LAYOUT_PADDING)
     else:
-        fig.tight_layout()
+        fig.tight_layout(pad=LAYOUT_PADDING)
     keep_data_labels_inside_axes(fig)
     separate_close_data_labels(fig)
     keep_data_labels_inside_axes(fig)
+    position_collision_aware_legends(fig)
 
 
 def save_plot(fig, output_path: Path, aspect_1_1: bool = False):
@@ -352,7 +516,7 @@ def save_plot(fig, output_path: Path, aspect_1_1: bool = False):
     if aspect_1_1:
         fig.savefig(output_path)
     else:
-        fig.savefig(output_path, bbox_inches='tight', pad_inches=0.25)
+        fig.savefig(output_path, bbox_inches='tight', pad_inches=EXPORT_PADDING_INCHES)
 
 
 def print_plot_options(test_name: str, output_dir: Path, options: dict,
@@ -362,7 +526,7 @@ def print_plot_options(test_name: str, output_dir: Path, options: dict,
     )
     y_scale = "logarithmic" if options["log_y"] else "linear"
     print(f"📐 {test_name.upper()} graph configuration for this run:")
-    print(f"   Canvas : {'1:1 square' if options['aspect_1_1'] else 'standard 11:6'}")
+    print(f"   Canvas : {'1:1 square (6:6)' if options['aspect_1_1'] else 'standard 6:4'}")
     print(f"   X-axis : {x_scale}")
     print(f"   Y-axis : {y_scale}")
     print(f"   Title  : {'hidden' if options['no_title'] else 'shown'}")
@@ -506,7 +670,7 @@ def _plot_single_mode(validities: list, avg_latencies: list, wc_latencies: list,
         color_avg = '#1f77b4'
         color_wc  = '#d62728'
 
-        figsize = (8, 8) if aspect_1_1 else (11, 6)
+        figsize = SQUARE_FIGURE_SIZE if aspect_1_1 else STANDARD_FIGURE_SIZE
         fig, ax1 = plt.subplots(figsize=figsize, dpi=300)
         if aspect_1_1:
             ax1.set_box_aspect(1)
@@ -527,11 +691,11 @@ def _plot_single_mode(validities: list, avg_latencies: list, wc_latencies: list,
         ax1.set_ylabel('Avg Monitor Latency (ms)', fontsize=AXIS_LABEL_FONT_SIZE, color=color_avg, labelpad=10)
         ax1.tick_params(axis='y', labelcolor=color_avg)
         if not log_y:
-            ax1.set_ylim(0, max(max(avg_latencies, default=0) * LATENCY_Y_HEADROOM_FACTOR, 20))
+            set_latency_y_limits(ax1, avg_latencies)
         ax1.set_xticks(x_coords)
         ax1.set_xticklabels(x_labels, fontsize=X_TICK_LABEL_FONT_SIZE)
         if equidistant_x:
-            ax1.set_xlim(-0.4, len(x_coords) - 0.6)
+            set_equidistant_x_limits(ax1, len(x_coords))
         ax1.grid(True, linestyle='--', alpha=0.4)
 
         ax2 = ax1.twinx()
@@ -549,7 +713,7 @@ def _plot_single_mode(validities: list, avg_latencies: list, wc_latencies: list,
                        color=color_wc, labelpad=10)
         ax2.tick_params(axis='y', labelcolor=color_wc)
         if not log_y:
-            ax2.set_ylim(0, max(max(wc_latencies, default=0) * LATENCY_Y_HEADROOM_FACTOR, 20))
+            set_latency_y_limits(ax2, wc_latencies)
 
         test_label = test_name.upper()
         mode_label = auth_mode.capitalize() + " Auth"
@@ -682,7 +846,7 @@ def generate_comparative_plots(local_csv: Path, remote_csv: Path,
     x_coords = get_x_coordinates(common_v, equidistant_x, log_x)
     x_labels   = [f"{int(v)}s" for v in common_v]
     test_label = test_name.upper()
-    figsize = (8, 8) if aspect_1_1 else (11, 6)
+    figsize = SQUARE_FIGURE_SIZE if aspect_1_1 else STANDARD_FIGURE_SIZE
 
     # ── Plot 1: Average Latency (Local vs Remote) ────────────────────────────
     try:
@@ -712,11 +876,11 @@ def generate_comparative_plots(local_csv: Path, remote_csv: Path,
         ax.set_xticks(x_coords)
         ax.set_xticklabels(x_labels, fontsize=X_TICK_LABEL_FONT_SIZE)
         if equidistant_x:
-            ax.set_xlim(-0.4, len(x_coords) - 0.6)
+            set_equidistant_x_limits(ax, len(x_coords))
         if not log_y:
-            ax.set_ylim(0, max(max(l_avg + r_avg, default=0) * LATENCY_Y_HEADROOM_FACTOR, 20))
+            set_latency_y_limits(ax, l_avg + r_avg)
         ax.grid(True, linestyle='--', alpha=0.4)
-        ax.legend(frameon=True, facecolor='white', framealpha=0.9, fontsize=LEGEND_FONT_SIZE, loc='upper right')
+        add_collision_aware_legend(ax)
 
         plot_title = f"{test_label}: Average Monitor Latency vs. Validity Period — Local vs. Remote Auth"
         if not no_title:
@@ -759,11 +923,11 @@ def generate_comparative_plots(local_csv: Path, remote_csv: Path,
         ax.set_xticks(x_coords)
         ax.set_xticklabels(x_labels, fontsize=X_TICK_LABEL_FONT_SIZE)
         if equidistant_x:
-            ax.set_xlim(-0.4, len(x_coords) - 0.6)
+            set_equidistant_x_limits(ax, len(x_coords))
         if not log_y:
-            ax.set_ylim(0, max(max(l_wc + r_wc, default=0) * LATENCY_Y_HEADROOM_FACTOR, 20))
+            set_latency_y_limits(ax, l_wc + r_wc)
         ax.grid(True, linestyle='--', alpha=0.4)
-        ax.legend(frameon=True, facecolor='white', framealpha=0.9, fontsize=LEGEND_FONT_SIZE, loc='upper right')
+        add_collision_aware_legend(ax)
 
         plot_title = f"{test_label}: Worst-Case Monitor Latency vs. Validity Period — Local vs. Remote Auth"
         if not no_title:
@@ -923,7 +1087,7 @@ def _add_rate_twinx(ax, x_coords, active_rates, still_rates, show_active: bool, 
     ax2.set_ylabel('Percentage Rate (%)', fontsize=AXIS_LABEL_FONT_SIZE, color='#555555', labelpad=10)
     ax2.set_ylim(-5, 115)
     l_lines, l_labels = ax.get_legend_handles_labels()
-    ax.legend(l_lines + lines, l_labels + labels, frameon=True, facecolor='white', framealpha=0.9, fontsize=LEGEND_FONT_SIZE, loc='upper right')
+    add_collision_aware_legend(ax, l_lines + lines, l_labels + labels)
 
 
 def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies: list,
@@ -942,7 +1106,7 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
 
     test_label = test_name.upper()
     mode_label = auth_mode.capitalize() + " Auth"
-    figsize = (8, 8) if aspect_1_1 else (11, 6)
+    figsize = SQUARE_FIGURE_SIZE if aspect_1_1 else STANDARD_FIGURE_SIZE
 
     x_coords = get_x_coordinates(thresholds, equidistant_x, log_x)
     # ── Graph 1: Average Monitor Latency vs. Threshold ───────────────────────
@@ -964,9 +1128,9 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
         ax.set_ylabel('Average Monitor Latency (ms)', fontsize=AXIS_LABEL_FONT_SIZE, color=color_lat, labelpad=10)
         set_threshold_x_ticks(ax, x_coords, thresholds, log_x)
         if equidistant_x:
-            ax.set_xlim(-0.4, len(x_coords) - 0.6)
+            set_equidistant_x_limits(ax, len(x_coords))
         if not log_y:
-            ax.set_ylim(0, max(max(avg_latencies, default=0) * LATENCY_Y_HEADROOM_FACTOR, 20))
+            set_latency_y_limits(ax, avg_latencies)
         ax.grid(True, linestyle='--', alpha=0.4)
         _add_rate_twinx(ax, x_coords, active_rates, still_rates, show_active, show_still)
 
@@ -1003,9 +1167,9 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
         ax.set_ylabel('Worst-Case Monitor Latency (ms)', fontsize=AXIS_LABEL_FONT_SIZE, color=color_wc, labelpad=10)
         set_threshold_x_ticks(ax, x_coords, thresholds, log_x)
         if equidistant_x:
-            ax.set_xlim(-0.4, len(x_coords) - 0.6)
+            set_equidistant_x_limits(ax, len(x_coords))
         if not log_y:
-            ax.set_ylim(0, max(max(wc_latencies, default=0) * LATENCY_Y_HEADROOM_FACTOR, 20))
+            set_latency_y_limits(ax, wc_latencies)
         ax.grid(True, linestyle='--', alpha=0.4)
         _add_rate_twinx(ax, x_coords, active_rates, still_rates, show_active, show_still)
 
@@ -1089,7 +1253,7 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
 
     x_coords = get_x_coordinates(common_t, equidistant_x, log_x)
     test_label = test_name.upper()
-    figsize    = (8, 8) if aspect_1_1 else (11, 6)
+    figsize = SQUARE_FIGURE_SIZE if aspect_1_1 else STANDARD_FIGURE_SIZE
 
     # ── Plot 1: Average Latency (Local vs Remote) ────────────────────────────
     try:
@@ -1117,11 +1281,11 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
         ax.set_ylabel('Average Monitor Latency (ms)', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
         set_threshold_x_ticks(ax, x_coords, common_t, log_x)
         if equidistant_x:
-            ax.set_xlim(-0.4, len(x_coords) - 0.6)
+            set_equidistant_x_limits(ax, len(x_coords))
         if not log_y:
-            ax.set_ylim(0, max(max(l_avg + r_avg, default=0) * LATENCY_Y_HEADROOM_FACTOR, 20))
+            set_latency_y_limits(ax, l_avg + r_avg)
         ax.grid(True, linestyle='--', alpha=0.4)
-        ax.legend(frameon=True, facecolor='white', framealpha=0.9, fontsize=LEGEND_FONT_SIZE, loc='upper right')
+        add_collision_aware_legend(ax)
 
         _add_rate_twinx(ax, x_coords, plot_act, plot_st, show_active, show_still)
 
@@ -1164,11 +1328,11 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
         ax.set_ylabel('Worst-Case Monitor Latency (ms)', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
         set_threshold_x_ticks(ax, x_coords, common_t, log_x)
         if equidistant_x:
-            ax.set_xlim(-0.4, len(x_coords) - 0.6)
+            set_equidistant_x_limits(ax, len(x_coords))
         if not log_y:
-            ax.set_ylim(0, max(max(l_wc + r_wc, default=0) * LATENCY_Y_HEADROOM_FACTOR, 20))
+            set_latency_y_limits(ax, l_wc + r_wc)
         ax.grid(True, linestyle='--', alpha=0.4)
-        ax.legend(frameon=True, facecolor='white', framealpha=0.9, fontsize=LEGEND_FONT_SIZE, loc='upper right')
+        add_collision_aware_legend(ax)
 
         _add_rate_twinx(ax, x_coords, plot_act, plot_st, show_active, show_still)
 
