@@ -1446,8 +1446,7 @@ def generate_test2_plots_and_reports(thresholds: list, results: dict, worst_case
 # ─────────────────────────────────────────────────────────────────────────────
 
 TEST3_CSV_NAME = "validity_threshold_latency.csv"
-TEST3_EXPECTED_VALIDITIES = {1.0, 2.0, 3.0, 4.0, 5.0}
-TEST3_EXPECTED_THRESHOLDS = {0.0001, 0.008, 0.02, 0.15, 0.6}
+TEST3_EXPECTED_AXIS_SIZE = 5
 TEST3_REPORT_PATTERN = re.compile(
     r"val_(\d+(?:\.\d+)?)s_thresh_(\d+(?:\.\d+)?)_run_(\d+)\.txt",
     re.IGNORECASE,
@@ -1457,20 +1456,16 @@ TEST3_REPORT_PATTERN = re.compile(
 def validate_test3_axes(validities, thresholds) -> None:
     validity_set = set(validities)
     threshold_set = set(thresholds)
-    if (validity_set == TEST3_EXPECTED_VALIDITIES
-            and threshold_set == TEST3_EXPECTED_THRESHOLDS):
+    if (len(validity_set) == TEST3_EXPECTED_AXIS_SIZE
+            and len(threshold_set) == TEST3_EXPECTED_AXIS_SIZE):
         return
 
-    missing_validities = sorted(TEST3_EXPECTED_VALIDITIES - validity_set)
-    unexpected_validities = sorted(validity_set - TEST3_EXPECTED_VALIDITIES)
-    missing_thresholds = sorted(TEST3_EXPECTED_THRESHOLDS - threshold_set)
-    unexpected_thresholds = sorted(threshold_set - TEST3_EXPECTED_THRESHOLDS)
     raise ValueError(
-        "Test 3 requires the complete fixed 5x5 grid. "
-        f"Missing validities={missing_validities or 'none'}, "
-        f"unexpected validities={unexpected_validities or 'none'}, "
-        f"missing thresholds={missing_thresholds or 'none'}, "
-        f"unexpected thresholds={unexpected_thresholds or 'none'}."
+        f"Test 3 requires {TEST3_EXPECTED_AXIS_SIZE} unique validity values "
+        f"and {TEST3_EXPECTED_AXIS_SIZE} unique threshold values, but found "
+        f"validities={sorted(validity_set)} and thresholds={sorted(threshold_set)}. "
+        "Threshold values are discovered from report filenames and are not "
+        "restricted to a predefined list."
     )
 
 
