@@ -41,6 +41,8 @@ from pathlib import Path
 # 10 pt after that reduction.
 STANDARD_FIGURE_SIZE = (6, 6)
 SQUARE_FIGURE_SIZE = (8, 8)
+HEATMAP_FIGURE_SIZE = (10.5, 8.0)
+FIGURE_DPI = 300
 BASE_FONT_SIZE = 20
 AXIS_LABEL_FONT_SIZE = 26
 AXIS_TITLE_FONT_SIZE = 24
@@ -662,7 +664,7 @@ def _plot_single_mode(validities: list, avg_latencies: list, wc_latencies: list,
         color_wc  = '#d62728'
 
         figsize = SQUARE_FIGURE_SIZE if aspect_1_1 else STANDARD_FIGURE_SIZE
-        fig, ax1 = plt.subplots(figsize=figsize, dpi=300)
+        fig, ax1 = plt.subplots(figsize=figsize, dpi=FIGURE_DPI)
         if aspect_1_1:
             ax1.set_box_aspect(1)
 
@@ -849,7 +851,7 @@ def generate_comparative_plots(local_csv: Path, remote_csv: Path,
 
     # ── Plot 1: Average Latency (Local vs Remote) ────────────────────────────
     try:
-        fig, ax = plt.subplots(figsize=figsize, dpi=300)
+        fig, ax = plt.subplots(figsize=figsize, dpi=FIGURE_DPI)
         if aspect_1_1:
             ax.set_box_aspect(1)
 
@@ -904,7 +906,7 @@ def generate_comparative_plots(local_csv: Path, remote_csv: Path,
 
     # ── Plot 2: Worst-Case Latency (Local vs Remote) ─────────────────────────
     try:
-        fig, ax = plt.subplots(figsize=figsize, dpi=300)
+        fig, ax = plt.subplots(figsize=figsize, dpi=FIGURE_DPI)
         if aspect_1_1:
             ax.set_box_aspect(1)
 
@@ -1127,7 +1129,7 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
     # ── Graph 1: Average Monitor Latency vs. Threshold ───────────────────────
     try:
         color_lat = '#1f77b4'
-        fig, ax = plt.subplots(figsize=figsize, dpi=300)
+        fig, ax = plt.subplots(figsize=figsize, dpi=FIGURE_DPI)
         if aspect_1_1:
             ax.set_box_aspect(1)
         ax.plot(x_coords, avg_latencies, marker='o', markersize=8, linewidth=2.5,
@@ -1166,7 +1168,7 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
     # ── Graph 2: Worst-Case Monitor Latency vs. Threshold ────────────────────
     try:
         color_wc = '#d62728'
-        fig, ax = plt.subplots(figsize=figsize, dpi=300)
+        fig, ax = plt.subplots(figsize=figsize, dpi=FIGURE_DPI)
         if aspect_1_1:
             ax.set_box_aspect(1)
         ax.plot(x_coords, wc_latencies, marker='s', markersize=8, linewidth=2.5,
@@ -1272,7 +1274,7 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
 
     # ── Plot 1: Average Latency (Local vs Remote) ────────────────────────────
     try:
-        fig, ax = plt.subplots(figsize=figsize, dpi=300)
+        fig, ax = plt.subplots(figsize=figsize, dpi=FIGURE_DPI)
         if aspect_1_1:
             ax.set_box_aspect(1)
         ax.plot(x_coords, l_avg, marker='o', markersize=8, linewidth=2.5,
@@ -1319,7 +1321,7 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
 
     # ── Plot 2: Worst-Case Latency (Local vs Remote) ─────────────────────────
     try:
-        fig, ax = plt.subplots(figsize=figsize, dpi=300)
+        fig, ax = plt.subplots(figsize=figsize, dpi=FIGURE_DPI)
         if aspect_1_1:
             ax.set_box_aspect(1)
         ax.plot(x_coords, l_wc, marker='o', markersize=8, linewidth=2.5,
@@ -1637,18 +1639,22 @@ def plot_test3_heatmap(csv_path: Path, output_dir: Path, auth_mode: str,
         for threshold in thresholds
     ]
 
-    fig, ax = plt.subplots(figsize=(7.5, 6.2), dpi=300)
+    fig, ax = plt.subplots(figsize=HEATMAP_FIGURE_SIZE, dpi=FIGURE_DPI)
     image = ax.imshow(matrix, cmap="RdYlGn_r", aspect="equal", origin="lower")
     ax.set_xticks(range(len(validities)))
     ax.set_xticklabels(
-        [f"{validity:g}s" for validity in validities], fontsize=16
+        [f"{validity:g}s" for validity in validities],
+        fontsize=X_TICK_LABEL_FONT_SIZE,
     )
     ax.set_yticks(range(len(thresholds)))
     ax.set_yticklabels(
-        [f"{threshold:.10g}" for threshold in thresholds], fontsize=16
+        [f"{threshold:.10g}" for threshold in thresholds],
+        fontsize=Y_TICK_LABEL_FONT_SIZE,
     )
-    ax.set_xlabel("Relative Validity Period (seconds)", fontsize=18)
-    ax.set_ylabel("Motion Threshold", fontsize=18)
+    ax.set_xlabel(
+        "Relative Validity Period (seconds)", fontsize=AXIS_LABEL_FONT_SIZE
+    )
+    ax.set_ylabel("Motion Threshold", fontsize=AXIS_LABEL_FONT_SIZE)
 
     for row_index, threshold in enumerate(thresholds):
         for column_index, validity in enumerate(validities):
@@ -1659,16 +1665,18 @@ def plot_test3_heatmap(csv_path: Path, output_dir: Path, auth_mode: str,
             ax.text(
                 column_index, row_index, f"{value:.2f}",
                 ha="center", va="center", color=text_color,
-                fontsize=12, fontweight="bold",
+                fontsize=DATA_LABEL_FONT_SIZE, fontweight="bold",
             )
 
     colorbar = fig.colorbar(image, ax=ax, fraction=0.046, pad=0.04)
-    colorbar.set_label("Average Monitor Latency (ms)", fontsize=18)
-    colorbar.ax.tick_params(labelsize=14)
+    colorbar.set_label(
+        "Average Monitor Latency (ms)", fontsize=AXIS_LABEL_FONT_SIZE
+    )
+    colorbar.ax.tick_params(labelsize=Y_TICK_LABEL_FONT_SIZE)
     if not no_title:
         fig.suptitle(
             f"TEST3 Monitor Latency Heatmap — {auth_mode.capitalize()} Auth",
-            fontsize=18, fontweight="bold", y=0.98,
+            fontsize=FIGURE_TITLE_FONT_SIZE, fontweight="bold", y=0.98,
         )
     fig.tight_layout(rect=(0, 0, 1, 0.95) if not no_title else None,
                      pad=LAYOUT_PADDING)
