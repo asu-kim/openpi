@@ -1638,7 +1638,7 @@ def plot_test3_heatmap(csv_path: Path, output_dir: Path, auth_mode: str,
     ]
 
     fig, ax = plt.subplots(figsize=(7.5, 6.2), dpi=300)
-    image = ax.imshow(matrix, cmap="viridis", aspect="equal")
+    image = ax.imshow(matrix, cmap="viridis", aspect="equal", origin="lower")
     ax.set_xticks(range(len(validities)))
     ax.set_xticklabels(
         [f"{validity:g}s" for validity in validities], fontsize=16
