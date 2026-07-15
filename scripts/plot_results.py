@@ -43,6 +43,12 @@ STANDARD_FIGURE_SIZE = (6, 6)
 SQUARE_FIGURE_SIZE = (8, 8)
 HEATMAP_FIGURE_SIZE = (10.5, 8.0)
 FIGURE_DPI = 300
+HEATMAP_AXIS_LABEL_FONT_SIZE = 32
+HEATMAP_TICK_LABEL_FONT_SIZE = 32
+HEATMAP_DATA_LABEL_FONT_SIZE = 26
+HEATMAP_TITLE_FONT_SIZE = 30
+HEATMAP_COLORBAR_LABEL_FONT_SIZE = 32
+HEATMAP_COLORBAR_TICK_FONT_SIZE = 30
 BASE_FONT_SIZE = 20
 AXIS_LABEL_FONT_SIZE = 26
 AXIS_TITLE_FONT_SIZE = 24
@@ -1644,17 +1650,18 @@ def plot_test3_heatmap(csv_path: Path, output_dir: Path, auth_mode: str,
     ax.set_xticks(range(len(validities)))
     ax.set_xticklabels(
         [f"{validity:g}s" for validity in validities],
-        fontsize=X_TICK_LABEL_FONT_SIZE,
+        fontsize=HEATMAP_TICK_LABEL_FONT_SIZE,
     )
     ax.set_yticks(range(len(thresholds)))
     ax.set_yticklabels(
         [f"{threshold:.10g}" for threshold in thresholds],
-        fontsize=Y_TICK_LABEL_FONT_SIZE,
+        fontsize=HEATMAP_TICK_LABEL_FONT_SIZE,
     )
     ax.set_xlabel(
-        "Relative Validity Period (seconds)", fontsize=AXIS_LABEL_FONT_SIZE
+        "Relative Validity Period (seconds)",
+        fontsize=HEATMAP_AXIS_LABEL_FONT_SIZE,
     )
-    ax.set_ylabel("Motion Threshold", fontsize=AXIS_LABEL_FONT_SIZE)
+    ax.set_ylabel("Motion Threshold", fontsize=HEATMAP_AXIS_LABEL_FONT_SIZE)
 
     for row_index, threshold in enumerate(thresholds):
         for column_index, validity in enumerate(validities):
@@ -1665,18 +1672,19 @@ def plot_test3_heatmap(csv_path: Path, output_dir: Path, auth_mode: str,
             ax.text(
                 column_index, row_index, f"{value:.2f}",
                 ha="center", va="center", color=text_color,
-                fontsize=DATA_LABEL_FONT_SIZE, fontweight="bold",
+                fontsize=HEATMAP_DATA_LABEL_FONT_SIZE, fontweight="bold",
             )
 
     colorbar = fig.colorbar(image, ax=ax, fraction=0.046, pad=0.04)
     colorbar.set_label(
-        "Average Monitor Latency (ms)", fontsize=AXIS_LABEL_FONT_SIZE
+        "Average Monitor Latency (ms)",
+        fontsize=HEATMAP_COLORBAR_LABEL_FONT_SIZE,
     )
-    colorbar.ax.tick_params(labelsize=Y_TICK_LABEL_FONT_SIZE)
+    colorbar.ax.tick_params(labelsize=HEATMAP_COLORBAR_TICK_FONT_SIZE)
     if not no_title:
         fig.suptitle(
             f"TEST3 Monitor Latency Heatmap — {auth_mode.capitalize()} Auth",
-            fontsize=FIGURE_TITLE_FONT_SIZE, fontweight="bold", y=0.98,
+            fontsize=HEATMAP_TITLE_FONT_SIZE, fontweight="bold", y=0.98,
         )
     fig.tight_layout(rect=(0, 0, 1, 0.95) if not no_title else None,
                      pad=LAYOUT_PADDING)
