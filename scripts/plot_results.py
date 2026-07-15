@@ -1638,7 +1638,7 @@ def plot_test3_heatmap(csv_path: Path, output_dir: Path, auth_mode: str,
     ]
 
     fig, ax = plt.subplots(figsize=(7.5, 6.2), dpi=300)
-    image = ax.imshow(matrix, cmap="viridis", aspect="equal", origin="lower")
+    image = ax.imshow(matrix, cmap="RdYlGn_r", aspect="equal", origin="lower")
     ax.set_xticks(range(len(validities)))
     ax.set_xticklabels(
         [f"{validity:g}s" for validity in validities], fontsize=16
@@ -1650,12 +1650,12 @@ def plot_test3_heatmap(csv_path: Path, output_dir: Path, auth_mode: str,
     ax.set_xlabel("Relative Validity Period (seconds)", fontsize=18)
     ax.set_ylabel("Motion Threshold", fontsize=18)
 
-    color_min, color_max = image.get_clim()
-    color_midpoint = color_min + (color_max - color_min) * 0.55
     for row_index, threshold in enumerate(thresholds):
         for column_index, validity in enumerate(validities):
             value = averages[(validity, threshold)]
-            text_color = "white" if value <= color_midpoint else "black"
+            red, green, blue, _ = image.cmap(image.norm(value))
+            luminance = 0.2126 * red + 0.7152 * green + 0.0722 * blue
+            text_color = "black" if luminance > 0.55 else "white"
             ax.text(
                 column_index, row_index, f"{value:.2f}",
                 ha="center", va="center", color=text_color,
