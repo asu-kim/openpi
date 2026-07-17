@@ -52,13 +52,13 @@ pip install numpy cryptography typing_extensions
 | :--- | :---: | :--- |
 | `--config-file` | **Yes** | Path to the IoTAuth entity config file (e.g., `/app/sst_config_creds/client.config`). |
 | `--log-file` | No | Path to a specific `pi0_fast_tokens*.jsonl` file for offline testing. If omitted, watches `data/aloha_sim/token_logs/` for new files. |
-| `--motion-threshold`| No | Motion threshold for joint peak-to-peak variation (default: `0.01` or `OPENPI_MOTION_THRESHOLD` env var). |
+| `--motion-threshold`| No | Normalized intra/inter motion threshold in `[0, 1]`, expressed as a fraction of each Gym-ALOHA joint range (default: `0.01` or `OPENPI_MOTION_THRESHOLD` env var). |
 | `--execution-horizon`| No | Leading actions used for the motion verdict and execution boundary (default: `10`). |
 
 ### Supported Environment Variables
 | Environment Variable | Description |
 | :--- | :--- |
-| `OPENPI_MOTION_THRESHOLD` | Dynamically overrides the default joint motion threshold (`0.01`). Example: `OPENPI_MOTION_THRESHOLD=0.05`. |
+| `OPENPI_MOTION_THRESHOLD` | Overrides the normalized motion threshold (`0.01`). For example, `0.05` means 5% of a joint's modeled range. |
 | `FORCE_IOTAUTH_REQUEST` | When set to `1`, forces a fresh session key request for every SIGA record, bypassing cached keys. |
 | `OPENPI_FAST_TOKEN_LOG` | Custom path/directory override for locating generated JSONL token log files. |
 | `SECURE_ACTUATOR_ENABLED` | Set to `1` to enable the isolated dual-path actuator service. |

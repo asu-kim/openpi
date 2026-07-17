@@ -223,8 +223,8 @@ class ActionMonitor:
         print(f" [METADATA] Validity Test: {val_period}s | Iteration/Run: {run_iter}/{total_runs} | Record Index: {record_idx}")
         print(
             f" [MOTION]   Label: {label.upper()} | "
-            f"Intra PTP: {motion.intra_score:.4f} | "
-            f"Inter delta: {motion.inter_score:.4f} | "
+            f"Normalized intra PTP: {motion.intra_score:.4f} | "
+            f"Normalized inter delta: {motion.inter_score:.4f} | "
             f"Combined: {motion.combined_score:.4f} | "
             f"Significant Joints: {motion.num_significant_dimensions}/{aloha_actions.shape[-1]} | "
             f"Threshold: {self.motion_threshold}"
@@ -441,7 +441,12 @@ def main():
     parser.add_argument("--log-file", help="Specific pi0_fast_tokens.jsonl file to read offline.")
     env_thresh = os.environ.get("OPENPI_MOTION_THRESHOLD", "").strip()
     default_thresh = float(env_thresh) if env_thresh else 0.01
-    parser.add_argument("--motion-threshold", type=float, default=default_thresh, help="Motion threshold for joint variation (default: 0.01 or OPENPI_MOTION_THRESHOLD env var).")
+    parser.add_argument(
+        "--motion-threshold",
+        type=float,
+        default=default_thresh,
+        help="Normalized motion threshold in [0, 1] (default: 0.01 or OPENPI_MOTION_THRESHOLD env var).",
+    )
     parser.add_argument("--execution-horizon", type=int, default=10, help="Number of leading actions the actuator executes (default: 10).")
     parser.add_argument("--force-iotauth-request", action="store_true", default=(os.environ.get("FORCE_IOTAUTH_REQUEST", "").strip().lower() in ("1", "true", "yes", "on")), help="Disable caching and send a session key request for every SIGA record.")
     parser.add_argument("--always-iotauth-request", action="store_true", default=(os.environ.get("ALWAYS_IOTAUTH_REQUEST", "").strip().lower() in ("1", "true", "yes", "on")), help="Send a session key request for EVERY record regardless of the motion threshold value.")
