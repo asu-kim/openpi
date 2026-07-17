@@ -19,20 +19,21 @@ fi
 # ─────────────────────────────────────────────────────────────────────────────
 # Argument parsing
 # Usage:
-#   ./scripts/run_tests.sh --test1|--test2|--test3 --local [--password <pw>] [--runs <n>]
-#   ./scripts/run_tests.sh --test1|--test2|--test3 --remote [--password <pw>] [--runs <n>] [--auth-delay-ms <ms>]
+#   ./scripts/run_tests.sh --test1|--test2|--test3 --local [--password <pw>] [--runs <n>] [--secure-actuator]
+#   ./scripts/run_tests.sh --test1|--test2|--test3 --remote [--password <pw>] [--runs <n>] [--auth-delay-ms <ms>] [--secure-actuator]
 # ─────────────────────────────────────────────────────────────────────────────
 TEST_NAME=""
 AUTH_MODE=""
 AUTH_PASSWORD="1234"
 RUNS="5"
-BYPASS_MODE="still"
+BYPASS_MODE="insiga"
 AUTH_DELAY_MS="0"
+SECURE_ACTUATOR_MODE=0
 PLOT_ARGS=()
 
 if [ "$#" -eq 0 ]; then
     echo "❌ Error: No arguments provided."
-    echo "Usage: $0 --test1|--test2|--test3 --local|--remote [--password <pw>] [--runs <n>] [--auth-delay-ms <ms>] [--bypass-mode still|active]"
+    echo "Usage: $0 --test1|--test2|--test3 --local|--remote [--password <pw>] [--runs <n>] [--auth-delay-ms <ms>] [--bypass-mode insiga|siga] [--secure-actuator]"
     exit 1
 fi
 
@@ -81,7 +82,7 @@ while [[ "$#" -gt 0 ]]; do
                 BYPASS_MODE="$2"
                 shift 2
             else
-                echo "❌ Error: --bypass-mode requires a value (still or active)."
+                echo "❌ Error: --bypass-mode requires a value (insiga or siga)."
                 exit 1
             fi
             ;;
@@ -94,13 +95,17 @@ while [[ "$#" -gt 0 ]]; do
                 exit 1
             fi
             ;;
+        --secure-actuator)
+            SECURE_ACTUATOR_MODE=1
+            shift
+            ;;
         --equidistant-x|--log-x|--log-y|--show-active-rate|--show-still-rate|--aspect-1-1|--square|--aspect-ratio-1-1|--no-title)
             PLOT_ARGS+=("$1")
             shift
             ;;
         *)
             echo "❌ Error: Unknown argument '$1'"
-            echo "Usage: $0 --test1|--test2|--test3 --local|--remote [--password <pw>] [--runs <n>] [--auth-delay-ms <ms>] [--bypass-mode still|active]"
+            echo "Usage: $0 --test1|--test2|--test3 --local|--remote [--password <pw>] [--runs <n>] [--auth-delay-ms <ms>] [--bypass-mode insiga|siga] [--secure-actuator]"
             exit 1
             ;;
     esac
@@ -109,15 +114,30 @@ done
 # Validate required flags
 if [ -z "$TEST_NAME" ]; then
     echo "❌ Error: A test flag is required (e.g. --test1, --test2, or --test3)."
-    echo "Usage: $0 --test1|--test2|--test3 --local|--remote [--password <pw>] [--runs <n>] [--auth-delay-ms <ms>] [--bypass-mode still|active]"
+    echo "Usage: $0 --test1|--test2|--test3 --local|--remote [--password <pw>] [--runs <n>] [--auth-delay-ms <ms>] [--bypass-mode insiga|siga] [--secure-actuator]"
     exit 1
 fi
 
 if [ -z "$AUTH_MODE" ]; then
     echo "❌ Error: An auth mode flag is required (--local or --remote)."
-    echo "Usage: $0 --test1|--test2|--test3 --local|--remote [--password <pw>] [--runs <n>] [--auth-delay-ms <ms>] [--bypass-mode still|active]"
+    echo "Usage: $0 --test1|--test2|--test3 --local|--remote [--password <pw>] [--runs <n>] [--auth-delay-ms <ms>] [--bypass-mode insiga|siga] [--secure-actuator]"
     exit 1
 fi
+
+case "$BYPASS_MODE" in
+    insiga|siga)
+        ;;
+    still)
+        BYPASS_MODE="insiga"
+        ;;
+    active)
+        BYPASS_MODE="siga"
+        ;;
+    *)
+        echo "❌ Error: --bypass-mode must be insiga or siga (received '$BYPASS_MODE')."
+        exit 1
+        ;;
+esac
 
 if ! [[ "$RUNS" =~ ^[1-9][0-9]*$ ]]; then
     echo "❌ Error: --runs must be a positive integer (received '$RUNS')."
@@ -194,10 +214,10 @@ fi
 
 # Create the full test_reports hierarchy (including future test placeholders)
 mkdir -p "$OUTPUT_DIR"
-mkdir -p "$OPENPI_DIR/test_reports/test2/local/still"
-mkdir -p "$OPENPI_DIR/test_reports/test2/local/active"
-mkdir -p "$OPENPI_DIR/test_reports/test2/remote/still"
-mkdir -p "$OPENPI_DIR/test_reports/test2/remote/active"
+mkdir -p "$OPENPI_DIR/test_reports/test2/local/insiga"
+mkdir -p "$OPENPI_DIR/test_reports/test2/local/siga"
+mkdir -p "$OPENPI_DIR/test_reports/test2/remote/insiga"
+mkdir -p "$OPENPI_DIR/test_reports/test2/remote/siga"
 mkdir -p "$OPENPI_DIR/test_reports/test3/local"
 mkdir -p "$OPENPI_DIR/test_reports/test3/remote"
 
@@ -206,6 +226,7 @@ mkdir -p "$OPENPI_DIR/test_reports/test3/remote"
     echo "Auth mode: $AUTH_MODE"
     echo "Runs per condition: $RUNS"
     echo "Auth RTT delay requested: ${AUTH_DELAY_MS} ms"
+    echo "Secure actuator: ${SECURE_ACTUATOR_MODE}"
     echo "Started: $(date '+%Y-%m-%d %H:%M:%S %Z')"
 } > "$OUTPUT_DIR/test_metadata.txt"
 
@@ -218,6 +239,7 @@ echo "Test        : $TEST_NAME"
 echo "Auth Mode   : $AUTH_MODE"
 echo "Password    : $AUTH_PASSWORD"
 echo "Auth Delay  : ${AUTH_DELAY_MS} ms added per Auth101 round trip"
+echo "Secure Path : $([ "$SECURE_ACTUATOR_MODE" -eq 1 ] && echo enabled || echo disabled)"
 if [ "$TEST_NAME" = "test3" ]; then
     echo "Validities  : ${TEST3_VALIDITY_PERIODS[*]} seconds"
     echo "Thresholds  : ${TEST3_THRESHOLDS[*]}"
@@ -271,7 +293,23 @@ if [ "$AUTH_MODE" = "local" ]; then
         # Copy freshly generated cert and key from IoTAuth
         cp "$IOTAUTH_DIR/entity/auth_certs/Auth101EntityCert.pem" "$dest_dir/"
         cp "$IOTAUTH_DIR/entity/credentials/keys/net1/Net1.Client_val_${val}Key.pem" "$dest_dir/"
-        echo "  ✅ val${val}/  — config (from IoTAuth) + cert + key written"
+
+        # The secure actuator is a separately registered Servers-group entity. It
+        # retrieves the monitor's session key by keyId during accept_secure().
+        server_config="$IOTAUTH_CONFIGS/server.config"
+        server_key="$IOTAUTH_DIR/entity/credentials/keys/net1/Net1.ServerKey.pem"
+        if [ ! -f "$server_config" ] || [ ! -f "$server_key" ]; then
+            echo "  ❌ Secure actuator credentials were not generated"
+            echo "     Expected: $server_config and $server_key"
+            exit 1
+        fi
+        cp "$server_config" "$dest_dir/server.config"
+        sed -i 's|"privateKey":.*|"privateKey": "./Net1.ServerKey.pem"|' \
+            "$dest_dir/server.config"
+        sed -i 's|"publicKey":.*|"publicKey": "./Auth101EntityCert.pem"|' \
+            "$dest_dir/server.config"
+        cp "$server_key" "$dest_dir/"
+        echo "  ✅ val${val}/  — monitor + secure actuator configs, certs, and keys written"
     done
 
     echo "✅ Certificates and keys successfully written (${#VALIDITY_PERIODS[@]} periods)."
@@ -328,6 +366,33 @@ echo ""
 echo "▶️  [Step 5/6] Executing Docker simulation loops across test conditions..."
 cd "$OPENPI_DIR"
 
+COMPOSE_ARGS=(-f examples/aloha_sim/compose.yml)
+if [ "$SECURE_ACTUATOR_MODE" -eq 1 ]; then
+    COMPOSE_ARGS+=(--profile secure-actuator)
+fi
+
+configure_secure_actuator() {
+    if [ "$SECURE_ACTUATOR_MODE" -eq 0 ]; then
+        unset SECURE_ACTUATOR_ENABLED ACTUATOR_CONFIG
+        return
+    fi
+
+    local host_actuator_config
+    host_actuator_config="$(dirname "$HOST_CONFIG_PATH")/server.config"
+    if [ ! -f "$host_actuator_config" ]; then
+        echo "❌ Error: Secure actuator config not found: $host_actuator_config"
+        echo "   Generate or install the registered Servers-group entity credentials first."
+        exit 1
+    fi
+    export SECURE_ACTUATOR_ENABLED=1
+    export ACTUATOR_CONFIG="$(dirname "$CONFIG_PATH")/server.config"
+}
+
+run_simulation() {
+    docker compose "${COMPOSE_ARGS[@]}" up --build --abort-on-container-exit
+    docker compose "${COMPOSE_ARGS[@]}" down >/dev/null 2>&1 || true
+}
+
 if [ "$TEST_NAME" = "test1" ]; then
     for VAL in "${VALIDITY_PERIODS[@]}"; do
         echo ""
@@ -368,10 +433,10 @@ if [ "$TEST_NAME" = "test1" ]; then
             export TEST_VALIDITY_PERIOD="${VAL}"
             export TEST_RUN_ITERATION="${RUN}"
             export TEST_TOTAL_RUNS="${RUNS}"
+            configure_secure_actuator
 
             # Run Docker simulation with --build flag and auto-exit when client finishes
-            docker compose -f examples/aloha_sim/compose.yml up --build --abort-on-container-exit
-            docker compose -f examples/aloha_sim/compose.yml down >/dev/null 2>&1 || true
+            run_simulation
 
             # Find latest generated jsonl log file
             LOG_DIR="$OPENPI_DIR/data/aloha_sim/token_logs"
@@ -443,9 +508,9 @@ elif [ "$TEST_NAME" = "test2" ]; then
             export TEST_VALIDITY_PERIOD="${VAL}"
             export TEST_RUN_ITERATION="${RUN}"
             export TEST_TOTAL_RUNS="${RUNS}"
+            configure_secure_actuator
 
-            docker compose -f examples/aloha_sim/compose.yml up --build --abort-on-container-exit
-            docker compose -f examples/aloha_sim/compose.yml down >/dev/null 2>&1 || true
+            run_simulation
 
             LOG_DIR="$OPENPI_DIR/data/aloha_sim/token_logs"
             LATEST_LOG="$(ls -t "$LOG_DIR"/*.jsonl 2>/dev/null | head -n 1 || true)"
@@ -519,9 +584,9 @@ elif [ "$TEST_NAME" = "test3" ]; then
                 export TEST_VALIDITY_PERIOD="$VAL"
                 export TEST_RUN_ITERATION="$RUN"
                 export TEST_TOTAL_RUNS="$RUNS"
+                configure_secure_actuator
 
-                docker compose -f examples/aloha_sim/compose.yml up --build --abort-on-container-exit
-                docker compose -f examples/aloha_sim/compose.yml down >/dev/null 2>&1 || true
+                run_simulation
 
                 LOG_DIR="$OPENPI_DIR/data/aloha_sim/token_logs"
                 LATEST_LOG="$(ls -t "$LOG_DIR"/*.jsonl 2>/dev/null | head -n 1 || true)"

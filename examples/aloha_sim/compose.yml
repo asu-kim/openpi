@@ -32,6 +32,17 @@ services:
       - ALWAYS_IOTAUTH_REQUEST=${ALWAYS_IOTAUTH_REQUEST:-}
       # Dynamically overrides the default joint motion sensitivity threshold (default: 0.01).
       - OPENPI_MOTION_THRESHOLD=${OPENPI_MOTION_THRESHOLD:-}
+      # Optional isolated actuator service. SIGA uses encrypted port 21100;
+      # INSIGA uses unencrypted loopback port 21102; control uses port 21101.
+      - SECURE_ACTUATOR_ENABLED=${SECURE_ACTUATOR_ENABLED:-}
+      - SECURE_ACTUATOR_HOST=${SECURE_ACTUATOR_HOST:-127.0.0.1}
+      - SECURE_ACTUATOR_PORT=${SECURE_ACTUATOR_PORT:-21100}
+      - SECURE_ACTUATOR_TIMEOUT=${SECURE_ACTUATOR_TIMEOUT:-5.0}
+      - INSIGA_ACTUATOR_HOST=${INSIGA_ACTUATOR_HOST:-127.0.0.1}
+      - INSIGA_ACTUATOR_PORT=${INSIGA_ACTUATOR_PORT:-21102}
+      - SECURE_ACTUATOR_CONTROL_HOST=${SECURE_ACTUATOR_CONTROL_HOST:-127.0.0.1}
+      - SECURE_ACTUATOR_CONTROL_PORT=${SECURE_ACTUATOR_CONTROL_PORT:-21101}
+      - SECURE_ACTUATOR_CONTROL_TIMEOUT=${SECURE_ACTUATOR_CONTROL_TIMEOUT:-30.0}
       # Metadata for test logging
       - TEST_VALIDITY_PERIOD=${TEST_VALIDITY_PERIOD:-}
       - TEST_RUN_ITERATION=${TEST_RUN_ITERATION:-}
@@ -39,6 +50,34 @@ services:
       # Optional remote-Auth101 RTT emulation. The runtime entrypoint reads the
       # Auth101 host/port from MONITOR_CONFIG and applies tc only to that flow.
       - AUTH_NETWORK_DELAY_MS=${AUTH_NETWORK_DELAY_MS:-0}
+
+  secure_actuator:
+    profiles: ["secure-actuator"]
+    image: aloha_sim
+    build:
+      context: ../..
+      dockerfile: examples/aloha_sim/Dockerfile
+    init: true
+    tty: true
+    network_mode: host
+    volumes:
+      - $PWD:/app
+      - ../../../iotauth:/iotauth
+    environment:
+      - SECURE_ACTUATOR_BIND_HOST=${SECURE_ACTUATOR_BIND_HOST:-0.0.0.0}
+      - SECURE_ACTUATOR_PORT=${SECURE_ACTUATOR_PORT:-21100}
+      - SECURE_ACTUATOR_CONTROL_BIND_HOST=${SECURE_ACTUATOR_CONTROL_BIND_HOST:-127.0.0.1}
+      - SECURE_ACTUATOR_CONTROL_PORT=${SECURE_ACTUATOR_CONTROL_PORT:-21101}
+      - SECURE_ACTION_MAX_AGE_MS=${SECURE_ACTION_MAX_AGE_MS:-30000}
+      - ACTUATOR_RECORD_WAIT_TIMEOUT=${ACTUATOR_RECORD_WAIT_TIMEOUT:-2.0}
+      - INSIGA_ACTUATOR_BIND_HOST=${INSIGA_ACTUATOR_BIND_HOST:-127.0.0.1}
+      - INSIGA_ACTUATOR_PORT=${INSIGA_ACTUATOR_PORT:-21102}
+      - ALOHA_MAX_EPISODE_STEPS=${ALOHA_MAX_EPISODE_STEPS:-}
+    command:
+      - /.venv/bin/python
+      - /app/examples/aloha_sim/secure_actuator_gateway.py
+      - --config-file
+      - ${ACTUATOR_CONFIG:-/app/sst_config_creds/server.config}
 
   openpi_server:
     image: openpi_server

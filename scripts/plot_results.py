@@ -126,7 +126,7 @@ def infer_test_context(reports_dir: Path) -> tuple[str, str, str]:
             test_name = parts[i + 1]   # e.g. 'test1' or 'test2'
             auth_mode = parts[i + 2]   # e.g. 'local' or 'remote'
             bypass_mode = None
-            if i + 3 < len(parts) and parts[i + 3] in ["still", "active"]:
+            if i + 3 < len(parts) and parts[i + 3] in ["insiga", "siga", "still", "active"]:
                 bypass_mode = parts[i + 3]
             return test_name, auth_mode, bypass_mode
     return None, None, None
@@ -532,9 +532,9 @@ def print_plot_options(test_name: str, output_dir: Path, options: dict,
     if test_name == "test2":
         overlays = []
         if show_active:
-            overlays.append("active rate")
+            overlays.append("SIGA rate")
         if show_still:
-            overlays.append("still rate")
+            overlays.append("INSIGA rate")
         print(f"   Rates  : {', '.join(overlays) if overlays else 'hidden'}")
     print(f"   Output : {output_dir}")
 
@@ -606,7 +606,7 @@ def load_reports(reports_dir: Path, validities: list, runs: int) -> tuple[dict, 
                     print(f", worst-case: {wc_lat:.2f} ms")
                 else:
                     wc_lat = lat
-                    print(f" (worst-case not found, using avg)")
+                    print(" (worst-case not found, using avg)")
             else:
                 print(f"⚠️  Warning: Report not found for validity {val}s run {r} in {reports_dir}")
 
@@ -1016,8 +1016,8 @@ def load_test2_reports(reports_dir: Path, thresholds: list, runs: int, bypass_mo
                 content = found_file.read_text()
                 avg_match = re.search(r"Average Monitor Latency:\s*([\d\.]+)\s*ms", content, re.IGNORECASE)
                 wc_match  = re.search(r"Worst-Case Monitor Lat\.:\s*([\d\.]+)\s*ms", content, re.IGNORECASE)
-                active_match = re.search(r"Active Rate:\s*([\d\.]+)\s*%", content, re.IGNORECASE)
-                still_match  = re.search(r"Still Rate \(Bypass\):\s*([\d\.]+)\s*%", content, re.IGNORECASE)
+                active_match = re.search(r"(?:SIGA|Active) Rate:\s*([\d\.]+)\s*%", content, re.IGNORECASE)
+                still_match  = re.search(r"(?:INSIGA|Still) Rate \(Bypass\):\s*([\d\.]+)\s*%", content, re.IGNORECASE)
 
                 if avg_match:
                     lat = float(avg_match.group(1))
@@ -1029,7 +1029,7 @@ def load_test2_reports(reports_dir: Path, thresholds: list, runs: int, bypass_mo
                 act_val = float(active_match.group(1)) if active_match else 0.0
                 st_val  = float(still_match.group(1)) if still_match else 0.0
 
-                print(f"✅ Loaded {found_file.name} -> avg: {lat:.2f} ms, active: {act_val:.2f}%, still: {st_val:.2f}%")
+                print(f"✅ Loaded {found_file.name} -> avg: {lat:.2f} ms, SIGA: {act_val:.2f}%, INSIGA: {st_val:.2f}%")
             else:
                 print(f"⚠️  Warning: Report not found for threshold {t} run {r} in {reports_dir}")
 
@@ -1048,12 +1048,12 @@ def write_test2_csv(thresholds: list, avg_latencies: list, wc_latencies: list,
                     active_rates: list, still_rates: list, output_dir: Path) -> Path:
     """
     Write the aggregated Test 2 summary CSV.
-    Format: Threshold,Average_ms,WorstCase_ms,Active_Rate_Pct,Still_Rate_Pct
+    Format: Threshold,Average_ms,WorstCase_ms,SIGA_Rate_Pct,INSIGA_Rate_Pct
     This is the single source of truth: graphs are always rendered from this file.
     """
     csv_path = output_dir / TEST2_CSV_NAME
     with open(csv_path, "w") as f:
-        f.write("Threshold,Average_ms,WorstCase_ms,Active_Rate_Pct,Still_Rate_Pct\n")
+        f.write("Threshold,Average_ms,WorstCase_ms,SIGA_Rate_Pct,INSIGA_Rate_Pct\n")
         for t, avg, wc, act, st in zip(thresholds, avg_latencies, wc_latencies, active_rates, still_rates):
             f.write(f"{t:.4f},{avg:.4f},{wc:.4f},{act:.2f},{st:.2f}\n")
     print(f"📊 CSV saved to: {csv_path}")
@@ -1091,17 +1091,17 @@ def _add_rate_twinx(ax, x_coords, active_rates, still_rates, show_active: bool, 
     texts = []
     if show_active and active_rates:
         l1, = ax2.plot(x_coords, active_rates, marker='^', markersize=7, linewidth=2,
-                       linestyle=':', color='#ff7f0e', label='% Active Rate')
+                       linestyle=':', color='#ff7f0e', label='% SIGA Rate')
         lines.append(l1)
-        labels.append('% Active Rate')
+        labels.append('% SIGA Rate')
         for i, x in enumerate(x_coords):
             texts.append(annotate_point(ax2, f"{active_rates[i]:.1f}%", (x, active_rates[i]),
                                         xytext=(0, 12), color='#ff7f0e'))
     if show_still and still_rates:
         l2, = ax2.plot(x_coords, still_rates, marker='v', markersize=7, linewidth=2,
-                       linestyle=':', color='#2ca02c', label='% Still Rate (Bypass)')
+                       linestyle=':', color='#2ca02c', label='% INSIGA Rate (Bypass)')
         lines.append(l2)
-        labels.append('% Still Rate (Bypass)')
+        labels.append('% INSIGA Rate (Bypass)')
         for i, x in enumerate(x_coords):
             texts.append(annotate_point(ax2, f"{still_rates[i]:.1f}%", (x, still_rates[i]),
                                         xytext=(0, 12), color='#2ca02c'))
@@ -1418,7 +1418,7 @@ def generate_test2_plots_and_reports(thresholds: list, results: dict, worst_case
     print("\n" + "=" * 80)
     print("MOTION THRESHOLD vs. MONITOR LATENCY & RATES TEST RESULTS")
     print("=" * 80)
-    header = f"{'Threshold (τ)':>14} | {'Average (ms)':>14} | {'Worst-Case (ms)':>16} | {'Active (%)':>11} | {'Still (%)':>10}"
+    header = f"{'Threshold (τ)':>14} | {'Average (ms)':>14} | {'Worst-Case (ms)':>16} | {'SIGA (%)':>11} | {'INSIGA (%)':>10}"
     print(header)
     print("-" * len(header))
     for row in summary_rows:
@@ -1758,8 +1758,8 @@ def main():
              "Auto-inferred from the reports-dir path if not specified."
     )
     parser.add_argument(
-        "--bypass-mode", default="still", choices=["still", "active"],
-        help="Definition of bypass rate for Test 2 graph: 'still' (percentage of still actions bypassed) or 'active' (percentage of active actions requiring auth)."
+        "--bypass-mode", default="insiga", choices=["insiga", "siga", "still", "active"],
+        help="Definition of bypass rate for Test 2 graphs. INSIGA/SIGA are canonical; still/active remain accepted for old reports."
     )
     parser.add_argument(
         "--compare-csv", default=None,
@@ -1770,12 +1770,12 @@ def main():
              "from the test_reports hierarchy."
     )
     parser.add_argument(
-        "--show-active-rate", action="store_true",
-        help="Include the average %% Active Rate on a secondary y-axis for Test 2 graphs."
+        "--show-siga-rate", "--show-active-rate", action="store_true", dest="show_active_rate",
+        help="Include the average %% SIGA Rate on a secondary y-axis for Test 2 graphs."
     )
     parser.add_argument(
-        "--show-still-rate", action="store_true",
-        help="Include the average %% Still Rate (Bypass Rate) on a secondary y-axis for Test 2 graphs."
+        "--show-insiga-rate", "--show-still-rate", action="store_true", dest="show_still_rate",
+        help="Include the average %% INSIGA Rate (Bypass Rate) on a secondary y-axis for Test 2 graphs."
     )
     parser.add_argument(
         "--equidistant-x", action="store_true", dest="equidistant_x",
@@ -1816,7 +1816,7 @@ def main():
         print(f"🔍 Auto-inferred test name: {test_name}")
     if args.auth_mode is None and inferred_mode:
         print(f"🔍 Auto-inferred auth mode: {auth_mode}")
-    if args.bypass_mode == "still" and inferred_bypass and inferred_bypass != "still":
+    if args.bypass_mode == "insiga" and inferred_bypass and inferred_bypass != "insiga":
         args.bypass_mode = inferred_bypass
         print(f"🔍 Auto-inferred bypass mode: {args.bypass_mode}")
 
@@ -1955,7 +1955,7 @@ def main():
                     local_csv, remote_csv = primary_csv, compare_csv
                 else:
                     local_csv, remote_csv = compare_csv, primary_csv
-                print(f"\n📊 Generating Test 2 comparative plots from CSVs...")
+                print("\n📊 Generating Test 2 comparative plots from CSVs...")
                 print(f"   Local  CSV: {local_csv}")
                 print(f"   Remote CSV: {remote_csv}")
                 generate_test2_comparative_plots(
@@ -2019,7 +2019,7 @@ def main():
                 else:
                     local_csv, remote_csv = compare_csv, primary_csv
 
-                print(f"\n📊 Generating comparative plots from CSVs...")
+                print("\n📊 Generating comparative plots from CSVs...")
                 print(f"   Local  CSV: {local_csv}")
                 print(f"   Remote CSV: {remote_csv}")
                 generate_comparative_plots(
