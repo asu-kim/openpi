@@ -5,7 +5,10 @@ from __future__ import annotations
 
 import argparse
 from collections import deque
+from dataclasses import dataclass
+import json
 import os
+from pathlib import Path
 import socket
 import sys
 import threading
@@ -28,17 +31,38 @@ from iotauth import SecureChannelClosed  # noqa: E402
 from iotauth import SecureServer  # noqa: E402
 
 
+@dataclass(frozen=True)
+class QueuedActuatorAction:
+    record_id: int
+    observation_id: int
+    motion_label: str
+    monitor_start_ms: int
+    action_index: int
+    action: np.ndarray
+
+
 class SecureActuatorGateway:
     """Merge ordered SIGA/INSIGA records and provide fail-closed execution."""
 
-    def __init__(self, *, max_message_age_ms: int = 30_000, record_wait_timeout: float = 2.0) -> None:
+    def __init__(
+        self,
+        *,
+        max_message_age_ms: int = 30_000,
+        record_wait_timeout: float = 2.0,
+        latency_log_path: str | None = None,
+    ) -> None:
         self.max_message_age_ms = max_message_age_ms
         self.record_wait_timeout = record_wait_timeout
         self.next_expected_record_id = 0
         self.last_valid_executed_action: np.ndarray | None = None
-        self._verified_actions: deque[tuple[int, np.ndarray]] = deque()
+        self._verified_actions: deque[QueuedActuatorAction] = deque()
         self._fatal_error: str | None = None
         self._condition = threading.Condition()
+        self._latency_log_path = Path(latency_log_path) if latency_log_path else None
+        self._latency_log_lock = threading.Lock()
+        self._latency_record_ids: set[int] = set()
+        if self._latency_log_path is not None:
+            self._latency_log_path.parent.mkdir(parents=True, exist_ok=True)
 
     def ingest_payload(self, payload: bytes, *, source: str) -> None:
         started = time.perf_counter()
@@ -64,11 +88,21 @@ class SecureActuatorGateway:
                     )
                     self._raise_if_fatal()
                 if self._verified_actions:
-                    queued_id = self._verified_actions[0][0]
+                    queued_id = self._verified_actions[0].record_id
                     self._set_fatal(f"record {message.record_id} arrived before queued record {queued_id} was consumed")
                     self._raise_if_fatal()
                 executable = message.actions[: message.execution_horizon]
-                self._verified_actions.extend((message.record_id, np.copy(action)) for action in executable)
+                self._verified_actions.extend(
+                    QueuedActuatorAction(
+                        record_id=message.record_id,
+                        observation_id=message.observation_id,
+                        motion_label=message.motion_label,
+                        monitor_start_ms=message.monitor_start_ms,
+                        action_index=action_index,
+                        action=np.copy(action),
+                    )
+                    for action_index, action in enumerate(executable)
+                )
                 self.next_expected_record_id += 1
                 self._condition.notify_all()
 
@@ -91,7 +125,7 @@ class SecureActuatorGateway:
             self._verified_actions.clear()
             self.last_valid_executed_action = np.asarray(current_state, dtype=np.float32).copy()
 
-    def next_action(self, expected_record_id: int) -> tuple[np.ndarray, bool]:
+    def next_action(self, expected_record_id: int) -> tuple[QueuedActuatorAction, bool]:
         deadline = time.monotonic() + self.record_wait_timeout
         with self._condition:
             while True:
@@ -108,17 +142,47 @@ class SecureActuatorGateway:
                 self._condition.wait(remaining)
 
             if self._verified_actions:
-                queued_record_id, action = self._verified_actions[0]
-                if queued_record_id != expected_record_id:
+                queued_action = self._verified_actions[0]
+                if queued_action.record_id != expected_record_id:
                     self._set_fatal(
                         f"execution record mismatch: runtime expected {expected_record_id}, "
-                        f"but actuator queued {queued_record_id}"
+                        f"but actuator queued {queued_action.record_id}"
                     )
                     self._raise_if_fatal()
                 self._verified_actions.popleft()
-                self.last_valid_executed_action = np.copy(action)
-                return action, True
+                self.last_valid_executed_action = np.copy(queued_action.action)
+                return queued_action, True
             raise AssertionError("verified action queue unexpectedly empty")
+
+    def record_driver_handoff(self, queued_action: QueuedActuatorAction, driver_handoff_ms: int) -> None:
+        """Record latency once, when a record's first action reaches the driver boundary."""
+        if queued_action.action_index != 0:
+            return
+        monitor_actuator_ms = driver_handoff_ms - queued_action.monitor_start_ms
+        if monitor_actuator_ms < 0:
+            raise RuntimeError(
+                "monitor-actuator latency is negative; monitor and actuator clocks are not synchronized"
+            )
+        record = {
+            "record_id": queued_action.record_id,
+            "observation_id": queued_action.observation_id,
+            "motion_label": queued_action.motion_label,
+            "monitor_start_ms": queued_action.monitor_start_ms,
+            "driver_handoff_ms": driver_handoff_ms,
+            "monitor_actuator_ms": monitor_actuator_ms,
+        }
+        with self._latency_log_lock:
+            if queued_action.record_id in self._latency_record_ids:
+                raise RuntimeError(f"duplicate driver handoff for record {queued_action.record_id}")
+            self._latency_record_ids.add(queued_action.record_id)
+            if self._latency_log_path is not None:
+                with self._latency_log_path.open("a", encoding="utf-8") as log_file:
+                    log_file.write(json.dumps(record, separators=(",", ":")) + "\n")
+        print(
+            "[SecureActuator] DRIVER_HANDOFF "
+            f"record={queued_action.record_id} label={queued_action.motion_label.upper()} "
+            f"monitor_actuator_ms={monitor_actuator_ms}"
+        )
 
     def _set_fatal(self, message: str) -> None:
         if self._fatal_error is None:
@@ -179,8 +243,10 @@ class ActuatorControlServer:
             expected_record_id = request.get("expected_record_id")
             if not isinstance(expected_record_id, int) or isinstance(expected_record_id, bool):
                 raise ValueError("apply_tick requires an integer expected_record_id")
-            action, from_verified_queue = self.gateway.next_action(expected_record_id)
-            self.environment.apply_action({"actions": action})
+            queued_action, from_verified_queue = self.gateway.next_action(expected_record_id)
+            driver_handoff_ms = int(time.time() * 1000)
+            self.environment.apply_action({"actions": queued_action.action})
+            self.gateway.record_driver_handoff(queued_action, driver_handoff_ms)
             return {"ok": True, "verified_action": from_verified_queue}
         raise ValueError(f"unknown actuator control command: {command!r}")
 
@@ -237,6 +303,7 @@ def serve(args: argparse.Namespace) -> None:
     gateway = SecureActuatorGateway(
         max_message_age_ms=args.max_message_age_ms,
         record_wait_timeout=args.record_wait_timeout,
+        latency_log_path=args.latency_log,
     )
     threading.Thread(
         target=_serve_secure_channels,
@@ -291,6 +358,11 @@ def main() -> None:
         "--record-wait-timeout",
         type=float,
         default=float(os.environ.get("ACTUATOR_RECORD_WAIT_TIMEOUT", "2.0")),
+    )
+    parser.add_argument(
+        "--latency-log",
+        default=os.environ.get("ACTUATOR_LATENCY_LOG") or None,
+        help="Optional JSONL path for one monitor_actuator_ms record per action chunk.",
     )
     serve(parser.parse_args())
 

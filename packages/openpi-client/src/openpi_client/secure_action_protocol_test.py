@@ -14,6 +14,7 @@ def test_action_chunk_round_trip_preserves_full_chunk_and_execution_horizon():
         record_id=7,
         observation_id=11,
         observation_timestamp_ms=1234,
+        monitor_start_ms=1200,
         execution_horizon=10,
         motion_label="siga",
     )
@@ -22,6 +23,7 @@ def test_action_chunk_round_trip_preserves_full_chunk_and_execution_horizon():
     assert decoded.record_id == 7
     assert decoded.observation_id == 11
     assert decoded.observation_timestamp_ms == 1234
+    assert decoded.monitor_start_ms == 1200
     assert decoded.execution_horizon == 10
     assert decoded.motion_label == "siga"
     np.testing.assert_array_equal(decoded.actions, actions)
@@ -33,6 +35,7 @@ def test_action_chunk_rejects_horizon_larger_than_chunk():
             np.zeros((10, 14), dtype=np.float32),
             record_id=0,
             observation_id=0,
+            monitor_start_ms=1,
             execution_horizon=11,
             motion_label="siga",
         )
@@ -46,6 +49,7 @@ def test_action_chunk_rejects_nonfinite_values():
             actions,
             record_id=0,
             observation_id=0,
+            monitor_start_ms=1,
             execution_horizon=10,
             motion_label="siga",
         )
@@ -57,6 +61,7 @@ def test_action_chunk_rejects_unknown_motion_label():
             np.zeros((10, 14), dtype=np.float32),
             record_id=0,
             observation_id=0,
+            monitor_start_ms=1,
             execution_horizon=10,
             motion_label="still",
         )
@@ -68,6 +73,7 @@ def test_default_timestamp_is_current_time():
         np.zeros((10, 14), dtype=np.float32),
         record_id=0,
         observation_id=0,
+        monitor_start_ms=before,
         execution_horizon=10,
         motion_label="insiga",
     )

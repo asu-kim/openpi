@@ -227,11 +227,12 @@ mkdir -p "$OPENPI_DIR/test_reports/test3/remote"
     echo "Runs per condition: $RUNS"
     echo "Auth RTT delay requested: ${AUTH_DELAY_MS} ms"
     echo "Secure actuator: ${SECURE_ACTUATOR_MODE}"
+    echo "Latency metric: $([ "$SECURE_ACTUATOR_MODE" -eq 1 ] && echo monitor_actuator_ms || echo monitor_latency)"
     echo "Started: $(date '+%Y-%m-%d %H:%M:%S %Z')"
 } > "$OUTPUT_DIR/test_metadata.txt"
 
 echo "====================================================================="
-echo "  Automated Context-Based Validity vs. Monitor Latency Testing"
+echo "  Automated Context-Based Validity vs. Secure Architecture Latency Testing"
 echo "====================================================================="
 echo "OpenPI Root : $OPENPI_DIR"
 echo "IoTAuth Root: $IOTAUTH_DIR"
@@ -388,6 +389,51 @@ configure_secure_actuator() {
     export ACTUATOR_CONFIG="$(dirname "$CONFIG_PATH")/server.config"
 }
 
+configure_actuator_latency_log() {
+    local run_stem="$1"
+    if [ "$SECURE_ACTUATOR_MODE" -eq 0 ]; then
+        unset ACTUATOR_LATENCY_LOG
+        ACTUATOR_LATENCY_LOG_HOST=""
+        return
+    fi
+
+    ACTUATOR_LATENCY_LOG_HOST="$OUTPUT_DIR/${run_stem}_monitor_actuator.jsonl"
+    rm -f "$ACTUATOR_LATENCY_LOG_HOST"
+    local output_relative="${OUTPUT_DIR#"$OPENPI_DIR"/}"
+    export ACTUATOR_LATENCY_LOG="/app/${output_relative}/${run_stem}_monitor_actuator.jsonl"
+}
+
+analyze_run_latency() {
+    local source_log="$1"
+    local report_file="$2"
+    local analyze_args=("$source_log" -o "$report_file")
+    if [ "$SECURE_ACTUATOR_MODE" -eq 1 ]; then
+        if [ ! -s "$ACTUATOR_LATENCY_LOG_HOST" ]; then
+            echo "❌ Error: Secure actuator produced no latency records at $ACTUATOR_LATENCY_LOG_HOST"
+            exit 1
+        fi
+        analyze_args+=(--actuator-log "$ACTUATOR_LATENCY_LOG_HOST")
+    fi
+    python3 scripts/analyze_latency.py "${analyze_args[@]}"
+}
+
+print_run_latency() {
+    local report_file="$1"
+    local run_label="$2"
+    local metric_label="Average Monitor Latency"
+    if [ "$SECURE_ACTUATOR_MODE" -eq 1 ]; then
+        metric_label="Average Monitor-Actuator Latency"
+    fi
+    if grep -i "$metric_label" "$report_file" >/dev/null 2>&1; then
+        local latency_value
+        latency_value="$(grep -i "$metric_label" "$report_file" | awk '{print $(NF-1)}')"
+        echo "✅ ${run_label} completed -> ${metric_label}: ${latency_value} ms"
+    else
+        echo "❌ Error: Could not find '${metric_label}' in $report_file."
+        exit 1
+    fi
+}
+
 run_simulation() {
     docker compose "${COMPOSE_ARGS[@]}" up --build --abort-on-container-exit
     docker compose "${COMPOSE_ARGS[@]}" down >/dev/null 2>&1 || true
@@ -434,6 +480,7 @@ if [ "$TEST_NAME" = "test1" ]; then
             export TEST_RUN_ITERATION="${RUN}"
             export TEST_TOTAL_RUNS="${RUNS}"
             configure_secure_actuator
+            configure_actuator_latency_log "val_${VAL}s_run_${RUN}"
 
             # Run Docker simulation with --build flag and auto-exit when client finishes
             run_simulation
@@ -454,15 +501,8 @@ if [ "$TEST_NAME" = "test1" ]; then
             REPORT_FILE="$OUTPUT_DIR/val_${VAL}s_run_${RUN}.txt"
             echo "📊 Analyzing latency for run ${RUN} from log: $(basename "$LATEST_LOG")..."
 
-            python3 scripts/analyze_latency.py "$LATEST_LOG" -o "$REPORT_FILE"
-
-            # Extract and display the average monitor latency from the report
-            if grep -i "Average Monitor Latency" "$REPORT_FILE" >/dev/null 2>&1; then
-                LAT_VAL="$(grep -i "Average Monitor Latency" "$REPORT_FILE" | awk '{print $(NF-1)}')"
-                echo "✅ Run ${RUN} completed -> Average Monitor Latency: ${LAT_VAL} ms"
-            else
-                echo "⚠️ Warning: Could not find 'Average Monitor Latency' in report."
-            fi
+            analyze_run_latency "$LATEST_LOG" "$REPORT_FILE"
+            print_run_latency "$REPORT_FILE" "Run ${RUN}"
 
             # Small delay between runs to let sockets clear
             sleep 2
@@ -509,6 +549,7 @@ elif [ "$TEST_NAME" = "test2" ]; then
             export TEST_RUN_ITERATION="${RUN}"
             export TEST_TOTAL_RUNS="${RUNS}"
             configure_secure_actuator
+            configure_actuator_latency_log "thresh_${THRESH}_run_${RUN}"
 
             run_simulation
 
@@ -526,14 +567,8 @@ elif [ "$TEST_NAME" = "test2" ]; then
             REPORT_FILE="$OUTPUT_DIR/thresh_${THRESH}_run_${RUN}.txt"
             echo "📊 Analyzing latency and bypass rate for run ${RUN} from log: $(basename "$LATEST_LOG")..."
 
-            python3 scripts/analyze_latency.py "$LATEST_LOG" -o "$REPORT_FILE"
-
-            if grep -i "Average Monitor Latency" "$REPORT_FILE" >/dev/null 2>&1; then
-                LAT_VAL="$(grep -i "Average Monitor Latency" "$REPORT_FILE" | awk '{print $(NF-1)}')"
-                echo "✅ Run ${RUN} completed -> Average Monitor Latency: ${LAT_VAL} ms"
-            else
-                echo "⚠️ Warning: Could not find 'Average Monitor Latency' in report."
-            fi
+            analyze_run_latency "$LATEST_LOG" "$REPORT_FILE"
+            print_run_latency "$REPORT_FILE" "Run ${RUN}"
 
             sleep 2
         done
@@ -585,6 +620,7 @@ elif [ "$TEST_NAME" = "test3" ]; then
                 export TEST_RUN_ITERATION="$RUN"
                 export TEST_TOTAL_RUNS="$RUNS"
                 configure_secure_actuator
+                configure_actuator_latency_log "val_${VAL}s_thresh_${THRESH}_run_${RUN}"
 
                 run_simulation
 
@@ -601,15 +637,8 @@ elif [ "$TEST_NAME" = "test3" ]; then
 
                 REPORT_FILE="$OUTPUT_DIR/val_${VAL}s_thresh_${THRESH}_run_${RUN}.txt"
                 echo "📊 Analyzing latency for threshold ${THRESH}, validity ${VAL}s, run ${RUN}..."
-                python3 scripts/analyze_latency.py "$LATEST_LOG" -o "$REPORT_FILE"
-
-                if grep -i "Average Monitor Latency" "$REPORT_FILE" >/dev/null 2>&1; then
-                    LAT_VAL="$(grep -i "Average Monitor Latency" "$REPORT_FILE" | awk '{print $(NF-1)}')"
-                    echo "✅ Run ${RUN} completed -> Average Monitor Latency: ${LAT_VAL} ms"
-                else
-                    echo "❌ Error: Could not find 'Average Monitor Latency' in $REPORT_FILE."
-                    exit 1
-                fi
+                analyze_run_latency "$LATEST_LOG" "$REPORT_FILE"
+                print_run_latency "$REPORT_FILE" "Run ${RUN}"
 
                 sleep 2
             done
@@ -647,7 +676,9 @@ if [ "$TEST_NAME" = "test1" ]; then
     if [ -d "$OTHER_BASE" ]; then
         for dir in $(ls -dt "$OTHER_BASE"/*/  2>/dev/null); do
             dir="${dir%/}"   # strip trailing slash
-            if [ -f "$dir/validity_vs_latency.csv" ]; then
+            if [ -f "$dir/validity_vs_latency.csv" ] \
+                && [ -f "$dir/test_metadata.txt" ] \
+                && grep -q "^Secure actuator: ${SECURE_ACTUATOR_MODE}$" "$dir/test_metadata.txt"; then
                 OTHER_CSV="$dir/validity_vs_latency.csv"
                 break
             fi
@@ -682,7 +713,9 @@ elif [ "$TEST_NAME" = "test2" ]; then
     if [ -d "$OTHER_BASE" ]; then
         for dir in $(ls -dt "$OTHER_BASE"/*/  2>/dev/null); do
             dir="${dir%/}"
-            if [ -f "$dir/threshold_vs_latency.csv" ]; then
+            if [ -f "$dir/threshold_vs_latency.csv" ] \
+                && [ -f "$dir/test_metadata.txt" ] \
+                && grep -q "^Secure actuator: ${SECURE_ACTUATOR_MODE}$" "$dir/test_metadata.txt"; then
                 OTHER_CSV="$dir/threshold_vs_latency.csv"
                 break
             fi

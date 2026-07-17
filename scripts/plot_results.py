@@ -63,6 +63,26 @@ DATA_LABEL_MIN_GAP_POINTS = 4
 LAYOUT_PADDING = 0.25
 EXPORT_PADDING_INCHES = 0.03
 EQUIDISTANT_X_MARGIN = 0.12
+LATENCY_DISPLAY_NAME = "Monitor Latency"
+
+
+def extract_latency_summary(content: str):
+    """Prefer the end-to-end secure architecture metric, with legacy monitor fallback."""
+    avg_match = re.search(
+        r"Average Monitor-Actuator Latency:\s*([\d.]+)\s*ms",
+        content,
+        re.IGNORECASE,
+    )
+    wc_match = re.search(
+        r"Worst-Case Monitor-Actuator Lat\.:\s*([\d.]+)\s*ms",
+        content,
+        re.IGNORECASE,
+    )
+    if avg_match is None:
+        avg_match = re.search(r"Average Monitor Latency:\s*([\d.]+)\s*ms", content, re.IGNORECASE)
+    if wc_match is None:
+        wc_match = re.search(r"Worst-Case Monitor Lat\.:\s*([\d.]+)\s*ms", content, re.IGNORECASE)
+    return avg_match, wc_match
 
 # Ensure MPLCONFIGDIR is set to a writable temporary directory to avoid permission errors on restricted/shared workstations
 if "MPLCONFIGDIR" not in os.environ:
@@ -515,7 +535,7 @@ def print_plot_options(test_name: str, output_dir: Path, options: dict,
         print(f"📐 {test_name.upper()} heatmap configuration for this run:")
         print("   X-axis : categorical validity periods")
         print("   Y-axis : categorical motion thresholds")
-        print("   Color  : average monitor latency (ms)")
+        print(f"   Color  : average {LATENCY_DISPLAY_NAME.lower()} (ms)")
         print(f"   Title  : {'hidden' if options['no_title'] else 'shown'}")
         print(f"   Output : {output_dir}")
         return
@@ -594,13 +614,12 @@ def load_reports(reports_dir: Path, validities: list, runs: int) -> tuple[dict, 
 
             if found_file:
                 content = found_file.read_text()
-                avg_match = re.search(r"Average Monitor Latency:\s*([\d\.]+)\s*ms", content, re.IGNORECASE)
-                wc_match  = re.search(r"Worst-Case Monitor Lat\.:\s*([\d\.]+)\s*ms", content, re.IGNORECASE)
+                avg_match, wc_match = extract_latency_summary(content)
                 if avg_match:
                     lat = float(avg_match.group(1))
                     print(f"✅ Loaded {found_file.name} -> avg: {lat:.2f} ms", end="")
                 else:
-                    print(f"⚠️  Warning: 'Average Monitor Latency' not found in {found_file.name}")
+                    print(f"⚠️  Warning: no supported average latency metric found in {found_file.name}")
                 if wc_match:
                     wc_lat = float(wc_match.group(1))
                     print(f", worst-case: {wc_lat:.2f} ms")
@@ -687,7 +706,7 @@ def _plot_single_mode(validities: list, avg_latencies: list, wc_latencies: list,
         optimize_annotations(texts1, ax=ax1)
 
         ax1.set_xlabel('Relative Validity Period (seconds)', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
-        ax1.set_ylabel('Avg Monitor Latency (ms)', fontsize=AXIS_LABEL_FONT_SIZE, color=color_avg, labelpad=10)
+        ax1.set_ylabel(f'Avg {LATENCY_DISPLAY_NAME} (ms)', fontsize=AXIS_LABEL_FONT_SIZE, color=color_avg, labelpad=10)
         ax1.tick_params(axis='y', labelcolor=color_avg)
         if not log_y:
             set_latency_y_limits(ax1, avg_latencies)
@@ -716,7 +735,7 @@ def _plot_single_mode(validities: list, avg_latencies: list, wc_latencies: list,
                                          xytext=(0, 12), color=color_wc))
         optimize_annotations(texts2, ax=ax2)
 
-        ax2.set_ylabel('Worst-Case Monitor Latency (ms)', fontsize=AXIS_LABEL_FONT_SIZE,
+        ax2.set_ylabel(f'Worst-Case {LATENCY_DISPLAY_NAME} (ms)', fontsize=AXIS_LABEL_FONT_SIZE,
                        color=color_wc, labelpad=10)
         ax2.tick_params(axis='y', labelcolor=color_wc)
         if not log_y:
@@ -724,7 +743,7 @@ def _plot_single_mode(validities: list, avg_latencies: list, wc_latencies: list,
 
         test_label = test_name.upper()
         mode_label = auth_mode.capitalize() + " Auth"
-        plot_title = f"{test_label}: Monitor Latency vs. Session Key Relative Validity — {mode_label}"
+        plot_title = f"{test_label}: {LATENCY_DISPLAY_NAME} vs. Session Key Relative Validity — {mode_label}"
         file_stem  = f"{test_name}_{auth_mode}_validity_vs_monitor_latency"
 
         if not no_title:
@@ -879,7 +898,7 @@ def generate_comparative_plots(local_csv: Path, remote_csv: Path,
         optimize_annotations(texts, ax=ax)
 
         ax.set_xlabel('Relative Validity Period (seconds)', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
-        ax.set_ylabel('Average Monitor Latency (ms)', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
+        ax.set_ylabel(f'Average {LATENCY_DISPLAY_NAME} (ms)', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
         ax.set_xticks(x_coords)
         ax.set_xticklabels(
             x_labels,
@@ -897,7 +916,7 @@ def generate_comparative_plots(local_csv: Path, remote_csv: Path,
         ax.grid(True, linestyle='--', alpha=0.4)
         add_collision_aware_legend(ax)
 
-        plot_title = f"{test_label}: Average Monitor Latency vs. Validity Period — Local vs. Remote Auth"
+        plot_title = f"{test_label}: Average {LATENCY_DISPLAY_NAME} vs. Validity Period — Local vs. Remote Auth"
         if not no_title:
             fig.suptitle(plot_title, fontsize=FIGURE_TITLE_FONT_SIZE, fontweight='bold', y=1.01)
         finalize_plot_layout(fig, aspect_1_1)
@@ -934,7 +953,7 @@ def generate_comparative_plots(local_csv: Path, remote_csv: Path,
         optimize_annotations(texts, ax=ax)
 
         ax.set_xlabel('Relative Validity Period (seconds)', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
-        ax.set_ylabel('Worst-Case Monitor Latency (ms)', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
+        ax.set_ylabel(f'Worst-Case {LATENCY_DISPLAY_NAME} (ms)', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
         ax.set_xticks(x_coords)
         ax.set_xticklabels(
             x_labels,
@@ -952,7 +971,7 @@ def generate_comparative_plots(local_csv: Path, remote_csv: Path,
         ax.grid(True, linestyle='--', alpha=0.4)
         add_collision_aware_legend(ax)
 
-        plot_title = f"{test_label}: Worst-Case Monitor Latency vs. Validity Period — Local vs. Remote Auth"
+        plot_title = f"{test_label}: Worst-Case {LATENCY_DISPLAY_NAME} vs. Validity Period — Local vs. Remote Auth"
         if not no_title:
             fig.suptitle(plot_title, fontsize=FIGURE_TITLE_FONT_SIZE, fontweight='bold', y=1.01)
         finalize_plot_layout(fig, aspect_1_1)
@@ -1014,8 +1033,7 @@ def load_test2_reports(reports_dir: Path, thresholds: list, runs: int, bypass_mo
 
             if found_file:
                 content = found_file.read_text()
-                avg_match = re.search(r"Average Monitor Latency:\s*([\d\.]+)\s*ms", content, re.IGNORECASE)
-                wc_match  = re.search(r"Worst-Case Monitor Lat\.:\s*([\d\.]+)\s*ms", content, re.IGNORECASE)
+                avg_match, wc_match = extract_latency_summary(content)
                 active_match = re.search(r"(?:SIGA|Active) Rate:\s*([\d\.]+)\s*%", content, re.IGNORECASE)
                 still_match  = re.search(r"(?:INSIGA|Still) Rate \(Bypass\):\s*([\d\.]+)\s*%", content, re.IGNORECASE)
 
@@ -1148,7 +1166,7 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
         optimize_annotations(texts, ax=ax)
 
         ax.set_xlabel('Motion Threshold Value, Log scale', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
-        ax.set_ylabel('Average Monitor Latency (ms)', fontsize=AXIS_LABEL_FONT_SIZE, color=color_lat, labelpad=10)
+        ax.set_ylabel(f'Average {LATENCY_DISPLAY_NAME} (ms)', fontsize=AXIS_LABEL_FONT_SIZE, color=color_lat, labelpad=10)
         set_threshold_x_ticks(ax, x_coords, thresholds, log_x)
         if equidistant_x:
             set_equidistant_x_limits(ax, len(x_coords))
@@ -1157,7 +1175,7 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
         ax.grid(True, linestyle='--', alpha=0.4)
         _add_rate_twinx(ax, x_coords, active_rates, still_rates, show_active, show_still)
 
-        plot_title = f"{test_label}: Average Monitor Latency vs. Motion Threshold — {mode_label}"
+        plot_title = f"{test_label}: Average {LATENCY_DISPLAY_NAME} vs. Motion Threshold — {mode_label}"
         if not no_title:
             fig.suptitle(plot_title, fontsize=FIGURE_TITLE_FONT_SIZE, fontweight='bold', y=1.01)
         finalize_plot_layout(fig, aspect_1_1)
@@ -1187,7 +1205,7 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
         optimize_annotations(texts, ax=ax)
 
         ax.set_xlabel('Motion Threshold Value, Log scale', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
-        ax.set_ylabel('Worst-Case Monitor Latency (ms)', fontsize=AXIS_LABEL_FONT_SIZE, color=color_wc, labelpad=10)
+        ax.set_ylabel(f'Worst-Case {LATENCY_DISPLAY_NAME} (ms)', fontsize=AXIS_LABEL_FONT_SIZE, color=color_wc, labelpad=10)
         set_threshold_x_ticks(ax, x_coords, thresholds, log_x)
         if equidistant_x:
             set_equidistant_x_limits(ax, len(x_coords))
@@ -1196,7 +1214,7 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
         ax.grid(True, linestyle='--', alpha=0.4)
         _add_rate_twinx(ax, x_coords, active_rates, still_rates, show_active, show_still)
 
-        plot_title = f"{test_label}: Worst-Case Monitor Latency vs. Motion Threshold — {mode_label}"
+        plot_title = f"{test_label}: Worst-Case {LATENCY_DISPLAY_NAME} vs. Motion Threshold — {mode_label}"
         if not no_title:
             fig.suptitle(plot_title, fontsize=FIGURE_TITLE_FONT_SIZE, fontweight='bold', y=1.01)
         finalize_plot_layout(fig, aspect_1_1)
@@ -1301,7 +1319,7 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
         optimize_annotations(texts, ax=ax)
 
         ax.set_xlabel('Motion Threshold Value, Log scale', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
-        ax.set_ylabel('Average Monitor Latency (ms)', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
+        ax.set_ylabel(f'Average {LATENCY_DISPLAY_NAME} (ms)', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
         set_threshold_x_ticks(ax, x_coords, common_t, log_x)
         if equidistant_x:
             set_equidistant_x_limits(ax, len(x_coords))
@@ -1312,7 +1330,7 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
 
         _add_rate_twinx(ax, x_coords, plot_act, plot_st, show_active, show_still)
 
-        plot_title = f"{test_label}: Average Monitor Latency vs. Threshold — Local vs. Remote Auth"
+        plot_title = f"{test_label}: Average {LATENCY_DISPLAY_NAME} vs. Threshold — Local vs. Remote Auth"
         if not no_title:
             fig.suptitle(plot_title, fontsize=FIGURE_TITLE_FONT_SIZE, fontweight='bold', y=1.01)
         finalize_plot_layout(fig, aspect_1_1)
@@ -1348,7 +1366,7 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
         optimize_annotations(texts, ax=ax)
 
         ax.set_xlabel('Motion Threshold Value, Log scale', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
-        ax.set_ylabel('Worst-Case Monitor Latency (ms)', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
+        ax.set_ylabel(f'Worst-Case {LATENCY_DISPLAY_NAME} (ms)', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
         set_threshold_x_ticks(ax, x_coords, common_t, log_x)
         if equidistant_x:
             set_equidistant_x_limits(ax, len(x_coords))
@@ -1359,7 +1377,7 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
 
         _add_rate_twinx(ax, x_coords, plot_act, plot_st, show_active, show_still)
 
-        plot_title = f"{test_label}: Worst-Case Monitor Latency vs. Threshold — Local vs. Remote Auth"
+        plot_title = f"{test_label}: Worst-Case {LATENCY_DISPLAY_NAME} vs. Threshold — Local vs. Remote Auth"
         if not no_title:
             fig.suptitle(plot_title, fontsize=FIGURE_TITLE_FONT_SIZE, fontweight='bold', y=1.01)
         finalize_plot_layout(fig, aspect_1_1)
@@ -1539,16 +1557,13 @@ def discover_test3_reports(reports_dir: Path) -> tuple[list, list, int, dict]:
     results = {(validity, threshold): []
                for threshold in sorted_thresholds
                for validity in sorted_validities}
-    latency_pattern = re.compile(
-        r"Average Monitor Latency:\s*([\d.]+)\s*ms", re.IGNORECASE
-    )
     for threshold in sorted_thresholds:
         for validity in sorted_validities:
             for run in range(1, max_run + 1):
                 report_file = discovered[(validity, threshold, run)]
-                match = latency_pattern.search(report_file.read_text())
+                match, _ = extract_latency_summary(report_file.read_text())
                 if not match:
-                    print("❌ Error: 'Average Monitor Latency' was not found in "
+                    print("❌ Error: no supported average latency metric was found in "
                           f"{report_file}")
                     sys.exit(1)
                 latency = float(match.group(1))
@@ -1677,13 +1692,13 @@ def plot_test3_heatmap(csv_path: Path, output_dir: Path, auth_mode: str,
 
     colorbar = fig.colorbar(image, ax=ax, fraction=0.046, pad=0.04)
     colorbar.set_label(
-        "Average Monitor Latency (ms)",
+        f"Average {LATENCY_DISPLAY_NAME} (ms)",
         fontsize=HEATMAP_COLORBAR_LABEL_FONT_SIZE,
     )
     colorbar.ax.tick_params(labelsize=HEATMAP_COLORBAR_TICK_FONT_SIZE)
     if not no_title:
         fig.suptitle(
-            f"TEST3 Monitor Latency Heatmap — {auth_mode.capitalize()} Auth",
+            f"TEST3 {LATENCY_DISPLAY_NAME} Heatmap — {auth_mode.capitalize()} Auth",
             fontsize=HEATMAP_TITLE_FONT_SIZE, fontweight="bold", y=0.98,
         )
     fig.tight_layout(rect=(0, 0, 1, 0.95) if not no_title else None,
@@ -1712,7 +1727,7 @@ def generate_test3_outputs(validities: list, thresholds: list, run_count: int,
         report_file.write(f"Runs per cell: {run_count}\n\n")
         report_file.write(
             f"{'Validity (s)':>12} | {'Threshold':>12} | "
-            f"{'Runs':>6} | {'Average Monitor Latency (ms)':>28}\n"
+            f"{'Runs':>6} | {f'Average {LATENCY_DISPLAY_NAME} (ms)':>40}\n"
         )
         report_file.write("-" * 69 + "\n")
         for threshold in thresholds:
@@ -1735,6 +1750,7 @@ def generate_test3_outputs(validities: list, thresholds: list, run_count: int,
 # ─────────────────────────────────────────────────────────────────────────────
 
 def main():
+    global LATENCY_DISPLAY_NAME
     parser = argparse.ArgumentParser(
         description="Aggregate latency report files and generate graphs. "
                     "Can be run standalone on any existing test_reports/ run folder."
@@ -1808,6 +1824,11 @@ def main():
         print(f"❌ Error: reports directory does not exist: {reports_dir}")
         sys.exit(1)
     output_dir.mkdir(parents=True, exist_ok=True)
+    if any(
+        "Average Monitor-Actuator Latency" in report.read_text()
+        for report in reports_dir.glob("*.txt")
+    ):
+        LATENCY_DISPLAY_NAME = "Monitor-Actuator Latency"
 
     inferred_test, inferred_mode, inferred_bypass = infer_test_context(reports_dir)
     test_name = args.test_name or inferred_test or "test1"

@@ -179,6 +179,7 @@ class ActionMonitor:
         Evaluates continuous float actions and enforces IoTAuth session keys.
         Returns the original actions if allowed, or a static (zero-motion) chunk if blocked.
         """
+        monitor_start_ms = int(time.time() * 1000)
         start_time = time.perf_counter()
         security_metrics = {}
         self.current_delivery_record_id = None
@@ -324,6 +325,7 @@ class ActionMonitor:
                         record_id=record_id,
                         observation_id=max(record_idx, 0),
                         observation_timestamp_ms=observation_timestamp_ms,
+                        monitor_start_ms=monitor_start_ms,
                         execution_horizon=executable_steps,
                         motion_label=label,
                     )
@@ -339,6 +341,7 @@ class ActionMonitor:
                         record_id=record_id,
                         observation_id=max(record_idx, 0),
                         observation_timestamp_ms=observation_timestamp_ms,
+                        monitor_start_ms=monitor_start_ms,
                         execution_horizon=executable_steps,
                     )
                     print(

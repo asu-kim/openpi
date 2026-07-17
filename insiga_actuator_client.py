@@ -24,6 +24,7 @@ class InsigaActuatorClient:
         record_id: int,
         observation_id: int,
         observation_timestamp_ms: int,
+        monitor_start_ms: int,
         execution_horizon: int,
     ) -> dict[str, float]:
         connect_started = time.perf_counter()
@@ -36,6 +37,7 @@ class InsigaActuatorClient:
             record_id=record_id,
             observation_id=observation_id,
             observation_timestamp_ms=observation_timestamp_ms,
+            monitor_start_ms=monitor_start_ms,
             execution_horizon=execution_horizon,
             motion_label="insiga",
         )

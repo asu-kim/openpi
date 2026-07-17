@@ -44,6 +44,7 @@ def test_client_reuses_channel_for_same_key_and_rotates_for_new_key():
         record_id=0,
         observation_id=0,
         observation_timestamp_ms=1,
+        monitor_start_ms=1,
         execution_horizon=10,
     )
     client.send_actions(
@@ -52,6 +53,7 @@ def test_client_reuses_channel_for_same_key_and_rotates_for_new_key():
         record_id=1,
         observation_id=1,
         observation_timestamp_ms=2,
+        monitor_start_ms=2,
         execution_horizon=10,
     )
     client.send_actions(
@@ -60,6 +62,7 @@ def test_client_reuses_channel_for_same_key_and_rotates_for_new_key():
         record_id=2,
         observation_id=2,
         observation_timestamp_ms=3,
+        monitor_start_ms=3,
         execution_horizon=10,
     )
 

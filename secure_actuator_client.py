@@ -35,6 +35,7 @@ class SecureActuatorClient:
         record_id: int,
         observation_id: int,
         observation_timestamp_ms: int,
+        monitor_start_ms: int,
         execution_horizon: int,
         motion_label: str = "siga",
     ) -> dict[str, float]:
@@ -48,6 +49,7 @@ class SecureActuatorClient:
             record_id=record_id,
             observation_id=observation_id,
             observation_timestamp_ms=observation_timestamp_ms,
+            monitor_start_ms=monitor_start_ms,
             execution_horizon=execution_horizon,
             motion_label=motion_label,
         )

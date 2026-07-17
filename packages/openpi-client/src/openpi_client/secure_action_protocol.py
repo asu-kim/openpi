@@ -11,7 +11,7 @@ import numpy as np
 from openpi_client import msgpack_numpy
 
 
-PROTOCOL_VERSION = 2
+PROTOCOL_VERSION = 3
 ACTION_CHUNK = "action_chunk"
 MAX_ACTION_TIMESTEPS = 256
 MAX_ACTION_DIMS = 256
@@ -26,6 +26,7 @@ class ActionChunkMessage:
     record_id: int
     observation_id: int
     observation_timestamp_ms: int
+    monitor_start_ms: int
     execution_horizon: int
     motion_label: str
     actions: np.ndarray
@@ -37,6 +38,7 @@ def encode_action_chunk(
     record_id: int,
     observation_id: int,
     observation_timestamp_ms: int | None = None,
+    monitor_start_ms: int,
     execution_horizon: int,
     motion_label: str,
 ) -> bytes:
@@ -49,6 +51,7 @@ def encode_action_chunk(
         "record_id": _nonnegative_int("record_id", record_id),
         "observation_id": _nonnegative_int("observation_id", observation_id),
         "observation_timestamp_ms": _nonnegative_int("observation_timestamp_ms", observation_timestamp_ms),
+        "monitor_start_ms": _nonnegative_int("monitor_start_ms", monitor_start_ms),
         "execution_horizon": int(execution_horizon),
         "motion_label": _motion_label(motion_label),
         "actions": array,
@@ -63,6 +66,7 @@ def decode_action_chunk(data: bytes) -> ActionChunkMessage:
         "record_id",
         "observation_id",
         "observation_timestamp_ms",
+        "monitor_start_ms",
         "execution_horizon",
         "motion_label",
         "actions",
@@ -74,6 +78,7 @@ def decode_action_chunk(data: bytes) -> ActionChunkMessage:
         record_id=_nonnegative_int("record_id", message["record_id"]),
         observation_id=_nonnegative_int("observation_id", message["observation_id"]),
         observation_timestamp_ms=_nonnegative_int("observation_timestamp_ms", message["observation_timestamp_ms"]),
+        monitor_start_ms=_nonnegative_int("monitor_start_ms", message["monitor_start_ms"]),
         execution_horizon=horizon,
         motion_label=_motion_label(message["motion_label"]),
         actions=actions,

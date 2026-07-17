@@ -20,8 +20,8 @@
    - `SIGA` chunks are serialized, encrypted and authenticated on port 21100. `INSIGA` chunks are serialized but unencrypted on port 21102.
    - No application ACK is used. Both paths share one global record sequence; the actuator fails closed on missing, duplicate or out-of-order IDs.
 4. **Real-Time Latency Logging**:
-   - Measures exact monitor execution time (in milliseconds) for each step.
-   - Updates the matching JSONL record with overall latency, intra/inter motion scores, Auth latency, and transport-specific serialization/send timings.
+   - Starts `monitor_actuator_ms` when decoded-motion analysis begins and stops it when the first verified action reaches the actuator-driver boundary.
+   - Writes exactly one actuator latency record per action chunk. Execution of the action and the remaining horizon are not included.
 
 ---
 
@@ -64,6 +64,7 @@ pip install numpy cryptography typing_extensions
 | `SECURE_ACTUATOR_ENABLED` | Set to `1` to enable the isolated dual-path actuator service. |
 | `SECURE_ACTUATOR_HOST` / `SECURE_ACTUATOR_PORT` | Encrypted SIGA endpoint (default port `21100`). |
 | `INSIGA_ACTUATOR_HOST` / `INSIGA_ACTUATOR_PORT` | Unencrypted INSIGA endpoint (default port `21102`). |
+| `ACTUATOR_LATENCY_LOG` | Optional actuator-side JSONL path for `monitor_actuator_ms` records. `run_tests.sh --secure-actuator` configures this automatically. |
 
 ### Secure actuator gateway
 
@@ -136,7 +137,7 @@ python openpi_monitor.py --config-file /app/sst_config_creds/client.config --log
 
 ## 5. Output Log Format
 
-When running, the monitor updates the JSONL records with classification and transport metrics:
+The token JSONL retains monitor classification data. Secure-actuator runs additionally create a dedicated actuator JSONL containing one driver-handoff measurement per chunk:
 
 ```json
 {
@@ -157,4 +158,28 @@ When running, the monitor updates the JSONL records with classification and tran
   "decoded_actions": [ ... ]
 }
 ```
-You can analyze these latencies across your runs using `python scripts/analyze_latency.py <path_to_jsonl>`.
+
+```json
+{
+  "record_id": 0,
+  "observation_id": 0,
+  "motion_label": "siga",
+  "monitor_start_ms": 1784300000000,
+  "driver_handoff_ms": 1784300000043,
+  "monitor_actuator_ms": 43
+}
+```
+
+Analyze both logs with:
+
+```bash
+python scripts/analyze_latency.py TOKEN_LOG.jsonl \
+  --actuator-log ACTUATOR_LATENCY_LOG.jsonl
+```
+
+The resulting per-run text report lists every inference with its SIGA/INSIGA label, intra score,
+inter score, combined score, and `monitor_actuator_ms`. Its final episode summary reports the
+SIGA/INSIGA percentages, mean latency, and the absolute maximum record latency. The automated
+suite then aggregates these text reports into a final CSV. For each condition, `WorstCase_ms` is
+the maximum observed record latency across all runs, not an average of per-run worst cases. Graphs
+are rendered only after writing and reading this CSV.
