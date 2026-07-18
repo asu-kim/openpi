@@ -47,8 +47,8 @@ class SecureActuatorGateway:
     def __init__(
         self,
         *,
-        max_message_age_ms: int = 30_000,
-        record_wait_timeout: float = 2.0,
+        max_message_age_ms: int = 300_000,
+        record_wait_timeout: float = 10.0,
         latency_log_path: str | None = None,
     ) -> None:
         self.max_message_age_ms = max_message_age_ms
@@ -352,12 +352,12 @@ def main() -> None:
     parser.add_argument(
         "--max-message-age-ms",
         type=int,
-        default=int(os.environ.get("SECURE_ACTION_MAX_AGE_MS", "30000")),
+        default=int(os.environ.get("SECURE_ACTION_MAX_AGE_MS", "300000")),
     )
     parser.add_argument(
         "--record-wait-timeout",
         type=float,
-        default=float(os.environ.get("ACTUATOR_RECORD_WAIT_TIMEOUT", "2.0")),
+        default=float(os.environ.get("ACTUATOR_RECORD_WAIT_TIMEOUT", "10.0")),
     )
     parser.add_argument(
         "--latency-log",

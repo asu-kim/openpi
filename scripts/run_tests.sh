@@ -189,6 +189,9 @@ fi
 export AUTH_NETWORK_DELAY_MS="$AUTH_DELAY_MS"
 export ALOHA_MAX_EPISODE_STEPS="${ALOHA_MAX_EPISODE_STEPS:-300}"
 export ALOHA_NUM_EPISODES="${ALOHA_NUM_EPISODES:-1}"
+export SECURE_ACTION_MAX_AGE_MS="${SECURE_ACTION_MAX_AGE_MS:-300000}"
+export SECURE_ACTUATOR_CONTROL_TIMEOUT="${SECURE_ACTUATOR_CONTROL_TIMEOUT:-300.0}"
+export ACTUATOR_RECORD_WAIT_TIMEOUT="${ACTUATOR_RECORD_WAIT_TIMEOUT:-10.0}"
 # Use a deterministic context that satisfies context_based_validity.graph.
 # Ordinary monitor runs still default to the wall clock when these are unset.
 export IOTAUTH_CONTEXT_PEOPLE="${IOTAUTH_CONTEXT_PEOPLE:-1}"

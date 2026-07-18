@@ -90,7 +90,7 @@ def main(args: Args) -> None:
         environment = SecureRemoteAlohaEnvironment(
             host=os.environ.get("SECURE_ACTUATOR_CONTROL_HOST", "127.0.0.1"),
             port=int(os.environ.get("SECURE_ACTUATOR_CONTROL_PORT", "21101")),
-            timeout=float(os.environ.get("SECURE_ACTUATOR_CONTROL_TIMEOUT", "30.0")),
+            timeout=float(os.environ.get("SECURE_ACTUATOR_CONTROL_TIMEOUT", "300.0")),
         )
     else:
         environment = _env.AlohaSimEnvironment(
