@@ -17,8 +17,12 @@ OPENPI_CLIENT_DIR = os.path.join(OPENPI_DIR, "packages/openpi-client/src")
 if OPENPI_CLIENT_DIR not in sys.path:
     sys.path.append(OPENPI_CLIENT_DIR)
 
-from openpi_client.action_motion_classifier import SIGA  # noqa: E402
-from openpi_client.action_motion_classifier import classify_action_motion  # noqa: E402
+from openpi_client.action_motion_classifier import (  # noqa: E402
+    ALOHA_ACTION_LOWER_LIMITS,
+    ALOHA_ACTION_UPPER_LIMITS,
+    SIGA,
+    classify_action_motion,
+)
 
 def wait_for_new_file(log_dir):
     print(f"Scanning existing log files in {log_dir}...")
@@ -202,6 +206,17 @@ class ActionMonitor:
             reference_action = np.asarray(self.last_valid_action, dtype=np.float32).reshape(-1)
         else:
             reference_action = aloha_actions[0]
+
+        # Clamp simulated observations and action coordinates to ALOHA limits to absorb physics/numerical overshoot
+        lower = ALOHA_ACTION_LOWER_LIMITS[: aloha_actions.shape[1]]
+        upper = ALOHA_ACTION_UPPER_LIMITS[: aloha_actions.shape[1]]
+        aloha_actions = np.clip(aloha_actions, lower, upper)
+        if actions.shape[-1] >= 14:
+            actions[:, :14] = aloha_actions
+        else:
+            actions = aloha_actions
+        reference_action = np.clip(reference_action[: aloha_actions.shape[1]], lower, upper)
+
         motion = classify_action_motion(
             aloha_actions,
             reference_action=reference_action,
