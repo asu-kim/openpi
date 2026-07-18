@@ -50,6 +50,11 @@ services:
       # Optional remote-Auth101 RTT emulation. The runtime entrypoint reads the
       # Auth101 host/port from MONITOR_CONFIG and applies tc only to that flow.
       - AUTH_NETWORK_DELAY_MS=${AUTH_NETWORK_DELAY_MS:-0}
+      # Optional deterministic context for policy-controlled benchmark runs.
+      # If time is unset, openpi_monitor uses the current wall-clock time.
+      - IOTAUTH_CONTEXT_PEOPLE=${IOTAUTH_CONTEXT_PEOPLE:-1}
+      - IOTAUTH_CONTEXT_LOCATION=${IOTAUTH_CONTEXT_LOCATION:-Classroom}
+      - IOTAUTH_CONTEXT_TIME=${IOTAUTH_CONTEXT_TIME:-}
 
   secure_actuator:
     profiles: ["secure-actuator"]

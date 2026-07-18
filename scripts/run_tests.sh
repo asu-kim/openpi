@@ -189,6 +189,11 @@ fi
 export AUTH_NETWORK_DELAY_MS="$AUTH_DELAY_MS"
 export ALOHA_MAX_EPISODE_STEPS="${ALOHA_MAX_EPISODE_STEPS:-300}"
 export ALOHA_NUM_EPISODES="${ALOHA_NUM_EPISODES:-1}"
+# Use a deterministic context that satisfies context_based_validity.graph.
+# Ordinary monitor runs still default to the wall clock when these are unset.
+export IOTAUTH_CONTEXT_PEOPLE="${IOTAUTH_CONTEXT_PEOPLE:-1}"
+export IOTAUTH_CONTEXT_LOCATION="${IOTAUTH_CONTEXT_LOCATION:-Meeting Room}"
+export IOTAUTH_CONTEXT_TIME="${IOTAUTH_CONTEXT_TIME:-14:00}"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Output directory setup
@@ -264,6 +269,7 @@ mkdir -p "$OPENPI_DIR/test_reports/test3/remote"
     echo "Classification boundary: score >= threshold"
     echo "Episode steps: ${ALOHA_MAX_EPISODE_STEPS}"
     echo "Episodes: ${ALOHA_NUM_EPISODES}"
+    echo "IoTAuth context: people=${IOTAUTH_CONTEXT_PEOPLE}, location=${IOTAUTH_CONTEXT_LOCATION}, time=${IOTAUTH_CONTEXT_TIME}"
     if [ "$TEST_NAME" = "test2" ]; then
         echo "Thresholds: ${TEST2_THRESHOLDS[*]}"
     elif [ "$TEST_NAME" = "test3" ]; then
@@ -519,6 +525,7 @@ metadata_is_compatible() {
         "Classification boundary"
         "Episode steps"
         "Episodes"
+        "IoTAuth context"
     )
     if [ "$TEST_NAME" = "test2" ]; then
         keys+=("Thresholds")

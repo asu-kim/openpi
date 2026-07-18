@@ -66,6 +66,7 @@ pip install numpy cryptography typing_extensions
 | `SECURE_ACTUATOR_HOST` / `SECURE_ACTUATOR_PORT` | Encrypted SIGA endpoint (default port `21100`). |
 | `INSIGA_ACTUATOR_HOST` / `INSIGA_ACTUATOR_PORT` | Unencrypted INSIGA endpoint (default port `21102`). |
 | `ACTUATOR_LATENCY_LOG` | Optional actuator-side JSONL path for `monitor_actuator_ms` records. `run_tests.sh --secure-actuator` configures this automatically. |
+| `IOTAUTH_CONTEXT_PEOPLE` / `IOTAUTH_CONTEXT_LOCATION` / `IOTAUTH_CONTEXT_TIME` | Override the context sent with session-key requests. Automated tests use the policy-valid fixed context `1`, `Meeting Room`, `14:00`; when time is unset, standalone monitoring uses the current wall clock. |
 
 ### Secure actuator gateway
 

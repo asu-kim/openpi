@@ -113,11 +113,17 @@ class ActionMonitor:
             print(f"Failed to initialize IoTAuth Context: {e}")
             raise
 
+        context_people = os.environ.get("IOTAUTH_CONTEXT_PEOPLE", "1").strip()
+        try:
+            context_people = int(context_people)
+        except ValueError as exc:
+            raise ValueError("IOTAUTH_CONTEXT_PEOPLE must be an integer") from exc
+        self.fixed_context_time = os.environ.get("IOTAUTH_CONTEXT_TIME", "").strip() or None
         self.purpose_payload = {
             "group": "Servers",
             "context": {
-                "Number of People": 1,
-                "Location": "Classroom",
+                "Number of People": context_people,
+                "Location": os.environ.get("IOTAUTH_CONTEXT_LOCATION", "Classroom").strip(),
                 "Time of Day": ""
             }
         }
@@ -238,7 +244,9 @@ class ActionMonitor:
         )
         print("-" * 75)
         
-        self.purpose_payload["context"]["Time of Day"] = datetime.datetime.now().strftime("%H:%M")
+        self.purpose_payload["context"]["Time of Day"] = (
+            self.fixed_context_time or datetime.datetime.now().strftime("%H:%M")
+        )
         current_time_ms = int(time.time() * 1000)
         
         is_valid_key = False
