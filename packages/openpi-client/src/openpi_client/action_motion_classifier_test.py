@@ -46,6 +46,26 @@ def test_low_intra_and_inter_motion_is_insiga():
     assert result.combined_score < 0.1
 
 
+def test_score_equal_to_threshold_is_siga():
+    actions = np.zeros((10, 14), dtype=np.float32)
+    actions[:, 1] = np.linspace(0.0, 0.25 * classifier.ALOHA_ACTION_RANGES[1], 10)
+
+    result = analyze(actions, reference=actions[0], threshold=0.25)
+
+    assert result.label == classifier.SIGA
+    assert np.isclose(result.combined_score, 0.25)
+
+
+def test_zero_threshold_makes_static_chunk_siga():
+    actions = np.zeros((10, 14), dtype=np.float32)
+
+    result = analyze(actions, reference=actions[0], threshold=0.0)
+
+    assert result.label == classifier.SIGA
+    assert result.combined_score == 0.0
+    assert result.num_significant_dimensions == 14
+
+
 def test_discarded_tail_does_not_change_classification():
     actions = np.zeros((32, 14), dtype=np.float32)
     actions[10:, :] = 10.0

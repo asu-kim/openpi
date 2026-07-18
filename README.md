@@ -362,21 +362,33 @@ In remote mode the script skips all certificate generation and Auth101 server st
 # Run Test 1 with local Auth101 server (default password, 5 runs per validity period)
 ./scripts/run_tests.sh --test1 --local
 
-# Run Test 1 with remote Auth101 server, custom password and run count
-./scripts/run_tests.sh --test1 --remote --password mypassword --runs 3
+# Run Test 2 once per motion threshold, including end-to-end actuator latency
+./scripts/run_tests.sh --test2 --local --runs 1 --secure-actuator \
+  --show-siga-rate --show-insiga-rate --equidistant-x
+
+# Run the Test 3 validity/threshold heatmap with remote Auth101
+./scripts/run_tests.sh --test3 --remote --runs 3 --secure-actuator
 ```
 
 #### Flags
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--test1` | *(required)* | Run Test 1: Monitor Latency vs. Session Key Validity Period |
+| `--test1` | *(one test required)* | Monitor latency vs. session-key validity |
+| `--test2` | *(one test required)* | Monitor latency and SIGA/INSIGA rate vs. motion threshold |
+| `--test3` | *(one test required)* | Monitor latency over the 5x5 validity/threshold grid |
 | `--local` | *(required)* | Use a locally started Auth101 server |
 | `--remote` | *(required)* | Use a remotely running Auth101 server (skips local setup steps) |
 | `--password <pw>` | `1234` | Auth server password |
-| `--runs <n>` | `5` | Number of simulation runs per validity period |
+| `--runs <n>` | `5` | Number of simulation runs per condition |
+| `--secure-actuator` | off | Measure end-to-end monitor-to-actuator latency |
+| `--show-siga-rate` | off | Add the SIGA-rate overlay to Test 2 graphs |
+| `--show-insiga-rate` | off | Add the INSIGA-rate overlay to Test 2 graphs |
+| `--equidistant-x` | off | Space Test 2 thresholds categorically |
 
-> **Note:** `--test1` and either `--local` or `--remote` are always required. `--test2` and `--test3` are reserved for future tests and will return an error if used.
+The Test 2 and Test 3 threshold grid is
+`0.0000, 0.0080, 0.0200, 0.1500, 0.6000`. Motion is classified as SIGA when
+`score >= threshold`; consequently, the `0.0000` condition produces a 100% SIGA rate.
 
 ### Output Structure
 

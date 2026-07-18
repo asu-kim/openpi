@@ -19,8 +19,7 @@ fi
 # ─────────────────────────────────────────────────────────────────────────────
 # Argument parsing
 # Usage:
-#   ./scripts/run_tests.sh --test1|--test2|--test3 --local [--password <pw>] [--runs <n>] [--secure-actuator]
-#   ./scripts/run_tests.sh --test1|--test2|--test3 --remote [--password <pw>] [--runs <n>] [--auth-delay-ms <ms>] [--secure-actuator]
+#   ./scripts/run_tests.sh --test1|--test2|--test3 --local|--remote [options]
 # ─────────────────────────────────────────────────────────────────────────────
 TEST_NAME=""
 AUTH_MODE=""
@@ -30,10 +29,32 @@ BYPASS_MODE="insiga"
 AUTH_DELAY_MS="0"
 SECURE_ACTUATOR_MODE=0
 PLOT_ARGS=()
+TEST2_THRESHOLDS=(0.0000 0.0080 0.0200 0.1500 0.6000)
+TEST3_VALIDITY_PERIODS=(1 2 3 4 5)
+TEST3_THRESHOLDS=(0.0000 0.0080 0.0200 0.1500 0.6000)
+
+usage() {
+    cat <<EOF
+Usage: $0 --test1|--test2|--test3 --local|--remote [options]
+
+Core options:
+  --password <pw>           Auth password (default: 1234)
+  --runs <n>                Runs per condition (default: 5)
+  --auth-delay-ms <ms>      Remote Auth101 round-trip delay emulation
+  --secure-actuator         Measure monitor-to-actuator latency
+  --bypass-mode <mode>      Result grouping: insiga or siga (default: insiga)
+
+Plot options:
+  --show-siga-rate          Overlay SIGA rate (legacy: --show-active-rate)
+  --show-insiga-rate        Overlay INSIGA rate (legacy: --show-still-rate)
+  --equidistant-x | --log-x | --log-y
+  --aspect-1-1 | --no-title
+EOF
+}
 
 if [ "$#" -eq 0 ]; then
     echo "❌ Error: No arguments provided."
-    echo "Usage: $0 --test1|--test2|--test3 --local|--remote [--password <pw>] [--runs <n>] [--auth-delay-ms <ms>] [--bypass-mode insiga|siga] [--secure-actuator]"
+    usage
     exit 1
 fi
 
@@ -99,13 +120,25 @@ while [[ "$#" -gt 0 ]]; do
             SECURE_ACTUATOR_MODE=1
             shift
             ;;
-        --equidistant-x|--log-x|--log-y|--show-active-rate|--show-still-rate|--aspect-1-1|--square|--aspect-ratio-1-1|--no-title)
+        --show-siga-rate|--show-active-rate)
+            PLOT_ARGS+=(--show-siga-rate)
+            shift
+            ;;
+        --show-insiga-rate|--show-still-rate)
+            PLOT_ARGS+=(--show-insiga-rate)
+            shift
+            ;;
+        --equidistant-x|--log-x|--log-y|--aspect-1-1|--square|--aspect-ratio-1-1|--no-title)
             PLOT_ARGS+=("$1")
             shift
             ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
         *)
             echo "❌ Error: Unknown argument '$1'"
-            echo "Usage: $0 --test1|--test2|--test3 --local|--remote [--password <pw>] [--runs <n>] [--auth-delay-ms <ms>] [--bypass-mode insiga|siga] [--secure-actuator]"
+            usage
             exit 1
             ;;
     esac
@@ -114,13 +147,13 @@ done
 # Validate required flags
 if [ -z "$TEST_NAME" ]; then
     echo "❌ Error: A test flag is required (e.g. --test1, --test2, or --test3)."
-    echo "Usage: $0 --test1|--test2|--test3 --local|--remote [--password <pw>] [--runs <n>] [--auth-delay-ms <ms>] [--bypass-mode insiga|siga] [--secure-actuator]"
+    usage
     exit 1
 fi
 
 if [ -z "$AUTH_MODE" ]; then
     echo "❌ Error: An auth mode flag is required (--local or --remote)."
-    echo "Usage: $0 --test1|--test2|--test3 --local|--remote [--password <pw>] [--runs <n>] [--auth-delay-ms <ms>] [--bypass-mode insiga|siga] [--secure-actuator]"
+    usage
     exit 1
 fi
 
@@ -154,6 +187,8 @@ if [ "$AUTH_MODE" != "remote" ] && ! [[ "$AUTH_DELAY_MS" =~ ^0+([.]0+)?$ ]]; the
     exit 1
 fi
 export AUTH_NETWORK_DELAY_MS="$AUTH_DELAY_MS"
+export ALOHA_MAX_EPISODE_STEPS="${ALOHA_MAX_EPISODE_STEPS:-300}"
+export ALOHA_NUM_EPISODES="${ALOHA_NUM_EPISODES:-1}"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Output directory setup
@@ -194,8 +229,6 @@ echo "📋 Validity periods from graph: ${VALIDITY_PERIODS[*]}s"
 
 # Test 3 intentionally uses a fixed 5x5 Cartesian grid. Its validity periods
 # must still be present in the graph because each one needs a matching config.
-TEST3_VALIDITY_PERIODS=(1 2 3 4 5)
-TEST3_THRESHOLDS=(0.0001 0.008 0.02 0.15 0.6)
 if [ "$TEST_NAME" = "test3" ]; then
     for required_val in "${TEST3_VALIDITY_PERIODS[@]}"; do
         if [[ " ${VALIDITY_PERIODS[*]} " != *" ${required_val} "* ]]; then
@@ -228,6 +261,15 @@ mkdir -p "$OPENPI_DIR/test_reports/test3/remote"
     echo "Auth RTT delay requested: ${AUTH_DELAY_MS} ms"
     echo "Secure actuator: ${SECURE_ACTUATOR_MODE}"
     echo "Latency metric: $([ "$SECURE_ACTUATOR_MODE" -eq 1 ] && echo monitor_actuator_ms || echo monitor_latency)"
+    echo "Classification boundary: score >= threshold"
+    echo "Episode steps: ${ALOHA_MAX_EPISODE_STEPS}"
+    echo "Episodes: ${ALOHA_NUM_EPISODES}"
+    if [ "$TEST_NAME" = "test2" ]; then
+        echo "Thresholds: ${TEST2_THRESHOLDS[*]}"
+    elif [ "$TEST_NAME" = "test3" ]; then
+        echo "Thresholds: ${TEST3_THRESHOLDS[*]}"
+        echo "Validity periods: ${TEST3_VALIDITY_PERIODS[*]}"
+    fi
     echo "Started: $(date '+%Y-%m-%d %H:%M:%S %Z')"
 } > "$OUTPUT_DIR/test_metadata.txt"
 
@@ -286,10 +328,11 @@ if [ "$AUTH_MODE" = "local" ]; then
 
         # Copy IoTAuth-generated config then patch key paths to point to same folder (./)
         cp "$src_config" "$dest_dir/client_val_${val}.config"
-        sed -i "s|\"privateKey\":.*|\"privateKey\": \"./Net1.Client_val_${val}Key.pem\"|" \
+        sed -i.bak "s|\"privateKey\":.*|\"privateKey\": \"./Net1.Client_val_${val}Key.pem\"|" \
             "$dest_dir/client_val_${val}.config"
-        sed -i "s|\"publicKey\":.*|\"publicKey\": \"./Auth101EntityCert.pem\"|" \
+        sed -i.bak "s|\"publicKey\":.*|\"publicKey\": \"./Auth101EntityCert.pem\"|" \
             "$dest_dir/client_val_${val}.config"
+        rm -f "$dest_dir/client_val_${val}.config.bak"
 
         # Copy freshly generated cert and key from IoTAuth
         cp "$IOTAUTH_DIR/entity/auth_certs/Auth101EntityCert.pem" "$dest_dir/"
@@ -305,10 +348,11 @@ if [ "$AUTH_MODE" = "local" ]; then
             exit 1
         fi
         cp "$server_config" "$dest_dir/server.config"
-        sed -i 's|"privateKey":.*|"privateKey": "./Net1.ServerKey.pem"|' \
+        sed -i.bak 's|"privateKey":.*|"privateKey": "./Net1.ServerKey.pem"|' \
             "$dest_dir/server.config"
-        sed -i 's|"publicKey":.*|"publicKey": "./Auth101EntityCert.pem"|' \
+        sed -i.bak 's|"publicKey":.*|"publicKey": "./Auth101EntityCert.pem"|' \
             "$dest_dir/server.config"
+        rm -f "$dest_dir/server.config.bak"
         cp "$server_key" "$dest_dir/"
         echo "  ✅ val${val}/  — monitor + secure actuator configs, certs, and keys written"
     done
@@ -368,6 +412,7 @@ echo "▶️  [Step 5/6] Executing Docker simulation loops across test condition
 cd "$OPENPI_DIR"
 
 COMPOSE_ARGS=(-f examples/aloha_sim/compose.yml)
+LOG_DIR="$OPENPI_DIR/data/aloha_sim/token_logs"
 if [ "$SECURE_ACTUATOR_MODE" -eq 1 ]; then
     COMPOSE_ARGS+=(--profile secure-actuator)
 fi
@@ -435,8 +480,57 @@ print_run_latency() {
 }
 
 run_simulation() {
-    docker compose "${COMPOSE_ARGS[@]}" up --build --abort-on-container-exit
+    local log_marker
+    log_marker="$(mktemp "$OUTPUT_DIR/.token-log-start.XXXXXX")"
+    if ! docker compose "${COMPOSE_ARGS[@]}" up --build --abort-on-container-exit; then
+        rm -f "$log_marker"
+        docker compose "${COMPOSE_ARGS[@]}" down >/dev/null 2>&1 || true
+        return 1
+    fi
     docker compose "${COMPOSE_ARGS[@]}" down >/dev/null 2>&1 || true
+    LATEST_LOG="$(python3 - "$LOG_DIR" "$log_marker" <<'PYEOF'
+import pathlib
+import sys
+
+log_dir = pathlib.Path(sys.argv[1])
+marker_mtime = pathlib.Path(sys.argv[2]).stat().st_mtime_ns
+candidates = [
+    path for path in log_dir.glob("*.jsonl")
+    if path.stat().st_mtime_ns > marker_mtime
+]
+if candidates:
+    print(max(candidates, key=lambda path: path.stat().st_mtime_ns))
+PYEOF
+)"
+    rm -f "$log_marker"
+    if [ -z "$LATEST_LOG" ] || [ ! -f "$LATEST_LOG" ]; then
+        echo "❌ Error: This simulation did not generate a new token log in $LOG_DIR."
+        return 1
+    fi
+}
+
+metadata_is_compatible() {
+    local candidate_metadata="$1"
+    local key current_value candidate_value
+    local keys=(
+        "Runs per condition"
+        "Secure actuator"
+        "Latency metric"
+        "Classification boundary"
+        "Episode steps"
+        "Episodes"
+    )
+    if [ "$TEST_NAME" = "test2" ]; then
+        keys+=("Thresholds")
+    fi
+    for key in "${keys[@]}"; do
+        current_value="$(sed -n "s/^${key}: //p" "$OUTPUT_DIR/test_metadata.txt" | head -n 1)"
+        candidate_value="$(sed -n "s/^${key}: //p" "$candidate_metadata" | head -n 1)"
+        if [ -z "$current_value" ] || [ "$current_value" != "$candidate_value" ]; then
+            return 1
+        fi
+    done
+    return 0
 }
 
 if [ "$TEST_NAME" = "test1" ]; then
@@ -485,15 +579,6 @@ if [ "$TEST_NAME" = "test1" ]; then
             # Run Docker simulation with --build flag and auto-exit when client finishes
             run_simulation
 
-            # Find latest generated jsonl log file
-            LOG_DIR="$OPENPI_DIR/data/aloha_sim/token_logs"
-            LATEST_LOG="$(ls -t "$LOG_DIR"/*.jsonl 2>/dev/null | head -n 1 || true)"
-
-            if [ -z "$LATEST_LOG" ] || [ ! -f "$LATEST_LOG" ]; then
-                echo "❌ Error: No .jsonl token log file generated in $LOG_DIR."
-                exit 1
-            fi
-
             # Copy the source .jsonl log into the run output directory for archival
             echo "📂 Copying source log $(basename "$LATEST_LOG") into run output folder..."
             cp "$LATEST_LOG" "$OUTPUT_DIR/"
@@ -509,9 +594,8 @@ if [ "$TEST_NAME" = "test1" ]; then
         done
     done
 elif [ "$TEST_NAME" = "test2" ]; then
-    THRESHOLDS=(0.0000 0.0080 0.0200 0.1500 0.6000)
     VAL="1"  # Fixed validity period of 1s as requested by user
-    for THRESH in "${THRESHOLDS[@]}"; do
+    for THRESH in "${TEST2_THRESHOLDS[@]}"; do
         echo ""
         echo "---------------------------------------------------------------------"
         echo "  Testing Motion Threshold: ${THRESH} (Fixed Validity: ${VAL}s)"
@@ -552,14 +636,6 @@ elif [ "$TEST_NAME" = "test2" ]; then
             configure_actuator_latency_log "thresh_${THRESH}_run_${RUN}"
 
             run_simulation
-
-            LOG_DIR="$OPENPI_DIR/data/aloha_sim/token_logs"
-            LATEST_LOG="$(ls -t "$LOG_DIR"/*.jsonl 2>/dev/null | head -n 1 || true)"
-
-            if [ -z "$LATEST_LOG" ] || [ ! -f "$LATEST_LOG" ]; then
-                echo "❌ Error: No .jsonl token log file generated in $LOG_DIR."
-                exit 1
-            fi
 
             echo "📂 Copying source log $(basename "$LATEST_LOG") into run output folder..."
             cp "$LATEST_LOG" "$OUTPUT_DIR/"
@@ -624,13 +700,6 @@ elif [ "$TEST_NAME" = "test3" ]; then
 
                 run_simulation
 
-                LOG_DIR="$OPENPI_DIR/data/aloha_sim/token_logs"
-                LATEST_LOG="$(ls -t "$LOG_DIR"/*.jsonl 2>/dev/null | head -n 1 || true)"
-                if [ -z "$LATEST_LOG" ] || [ ! -f "$LATEST_LOG" ]; then
-                    echo "❌ Error: No .jsonl token log file generated in $LOG_DIR."
-                    exit 1
-                fi
-
                 ARCHIVED_LOG="$OUTPUT_DIR/val_${VAL}s_thresh_${THRESH}_run_${RUN}.jsonl"
                 echo "📂 Archiving source log as $(basename "$ARCHIVED_LOG")..."
                 cp "$LATEST_LOG" "$ARCHIVED_LOG"
@@ -678,7 +747,7 @@ if [ "$TEST_NAME" = "test1" ]; then
             dir="${dir%/}"   # strip trailing slash
             if [ -f "$dir/validity_vs_latency.csv" ] \
                 && [ -f "$dir/test_metadata.txt" ] \
-                && grep -q "^Secure actuator: ${SECURE_ACTUATOR_MODE}$" "$dir/test_metadata.txt"; then
+                && metadata_is_compatible "$dir/test_metadata.txt"; then
                 OTHER_CSV="$dir/validity_vs_latency.csv"
                 break
             fi
@@ -697,7 +766,7 @@ if [ "$TEST_NAME" = "test1" ]; then
             "${PLOT_ARGS[@]}"
     else
         echo "ℹ️  Only $AUTH_MODE Test 1 data found. Using single-mode (combined) graph."
-        python3 scripts/plot_results.py --reports-dir "$OUTPUT_DIR" --bypass-mode "$BYPASS_MODE" "${PLOT_ARGS[@]}"
+        python3 scripts/plot_results.py --reports-dir "$OUTPUT_DIR" --bypass-mode "$BYPASS_MODE" --no-auto-compare "${PLOT_ARGS[@]}"
     fi
 elif [ "$TEST_NAME" = "test2" ]; then
     TEST2_BASE="$OPENPI_DIR/test_reports/test2"
@@ -715,7 +784,7 @@ elif [ "$TEST_NAME" = "test2" ]; then
             dir="${dir%/}"
             if [ -f "$dir/threshold_vs_latency.csv" ] \
                 && [ -f "$dir/test_metadata.txt" ] \
-                && grep -q "^Secure actuator: ${SECURE_ACTUATOR_MODE}$" "$dir/test_metadata.txt"; then
+                && metadata_is_compatible "$dir/test_metadata.txt"; then
                 OTHER_CSV="$dir/threshold_vs_latency.csv"
                 break
             fi
@@ -734,7 +803,7 @@ elif [ "$TEST_NAME" = "test2" ]; then
             "${PLOT_ARGS[@]}"
     else
         echo "ℹ️  Only $AUTH_MODE Test 2 data found. Generating single-mode graphs."
-        python3 scripts/plot_results.py --reports-dir "$OUTPUT_DIR" --bypass-mode "$BYPASS_MODE" "${PLOT_ARGS[@]}"
+        python3 scripts/plot_results.py --reports-dir "$OUTPUT_DIR" --bypass-mode "$BYPASS_MODE" --no-auto-compare "${PLOT_ARGS[@]}"
     fi
 elif [ "$TEST_NAME" = "test3" ]; then
     echo "🌡️  Aggregating the 5x5 Test 3 grid and generating the monitor-latency heatmap..."

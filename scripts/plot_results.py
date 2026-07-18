@@ -1012,7 +1012,7 @@ def discover_test2_reports(reports_dir: Path) -> tuple[list, int]:
     return thresholds, runs
 
 
-def load_test2_reports(reports_dir: Path, thresholds: list, runs: int, bypass_mode: str = "still") -> tuple[dict, dict, dict, dict]:
+def load_test2_reports(reports_dir: Path, thresholds: list, runs: int) -> tuple[dict, dict, dict, dict]:
     results = {t: [] for t in thresholds}
     wc_results = {t: [] for t in thresholds}
     active_results = {t: [] for t in thresholds}
@@ -1020,10 +1020,6 @@ def load_test2_reports(reports_dir: Path, thresholds: list, runs: int, bypass_mo
 
     for t in thresholds:
         for r in range(1, runs + 1):
-            lat = 0.0
-            wc_lat = 0.0
-            act_val = 0.0
-            st_val = 0.0
             found_file = None
             for cand in sorted(reports_dir.glob(f"thresh_*_run_{r}.txt")):
                 m = re.match(r"thresh_([\d\.]+)_run_\d+\.txt", cand.name, re.IGNORECASE)
@@ -1037,19 +1033,37 @@ def load_test2_reports(reports_dir: Path, thresholds: list, runs: int, bypass_mo
                 active_match = re.search(r"(?:SIGA|Active) Rate:\s*([\d\.]+)\s*%", content, re.IGNORECASE)
                 still_match  = re.search(r"(?:INSIGA|Still) Rate \(Bypass\):\s*([\d\.]+)\s*%", content, re.IGNORECASE)
 
-                if avg_match:
-                    lat = float(avg_match.group(1))
-                if wc_match:
-                    wc_lat = float(wc_match.group(1))
-                else:
-                    wc_lat = lat
+                missing_metrics = []
+                if avg_match is None:
+                    missing_metrics.append("average latency")
+                if wc_match is None:
+                    missing_metrics.append("worst-case latency")
+                if active_match is None:
+                    missing_metrics.append("SIGA rate")
+                if still_match is None:
+                    missing_metrics.append("INSIGA rate")
+                if missing_metrics:
+                    print(
+                        f"❌ Error: {found_file} is missing required metrics: "
+                        f"{', '.join(missing_metrics)}"
+                    )
+                    sys.exit(1)
 
-                act_val = float(active_match.group(1)) if active_match else 0.0
-                st_val  = float(still_match.group(1)) if still_match else 0.0
+                lat = float(avg_match.group(1))
+                wc_lat = float(wc_match.group(1))
+                act_val = float(active_match.group(1))
+                st_val = float(still_match.group(1))
+                if abs((act_val + st_val) - 100.0) > 0.02:
+                    print(
+                        f"❌ Error: {found_file} has inconsistent classification rates: "
+                        f"SIGA={act_val:.2f}% and INSIGA={st_val:.2f}%"
+                    )
+                    sys.exit(1)
 
                 print(f"✅ Loaded {found_file.name} -> avg: {lat:.2f} ms, SIGA: {act_val:.2f}%, INSIGA: {st_val:.2f}%")
             else:
-                print(f"⚠️  Warning: Report not found for threshold {t} run {r} in {reports_dir}")
+                print(f"❌ Error: Report not found for threshold {t} run {r} in {reports_dir}")
+                sys.exit(1)
 
             results[t].append(lat)
             wc_results[t].append(wc_lat)
@@ -1786,6 +1800,10 @@ def main():
              "from the test_reports hierarchy."
     )
     parser.add_argument(
+        "--no-auto-compare", action="store_true",
+        help="Do not auto-discover an opposite-auth CSV when --compare-csv is omitted."
+    )
+    parser.add_argument(
         "--show-siga-rate", "--show-active-rate", action="store_true", dest="show_active_rate",
         help="Include the average %% SIGA Rate on a secondary y-axis for Test 2 graphs."
     )
@@ -1889,8 +1907,10 @@ def main():
             parser.error("--compare-csv is not supported for Test 3 heatmaps")
         compare_csv = None
     else:
-        compare_csv = Path(args.compare_csv).resolve() if args.compare_csv else discover_compare_csv(
-            reports_dir, test_name, auth_mode, args.bypass_mode
+        compare_csv = Path(args.compare_csv).resolve() if args.compare_csv else (
+            None if args.no_auto_compare else discover_compare_csv(
+                reports_dir, test_name, auth_mode, args.bypass_mode
+            )
         )
         if compare_csv and not args.compare_csv:
             print(f"🔍 Auto-discovered comparison CSV: {compare_csv}")
@@ -1959,7 +1979,7 @@ def main():
             print("=" * 80)
 
             results, wc_results, active_results, still_results = load_test2_reports(
-                reports_dir, thresholds, runs, bypass_mode=args.bypass_mode
+                reports_dir, thresholds, runs
             )
             primary_csv = generate_test2_plots_and_reports(
                 thresholds, results, wc_results, active_results, still_results,

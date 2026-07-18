@@ -13,6 +13,7 @@
    - The maximum of these scores produces **`SIGA`** (Significant Action) or **`INSIGA`** (Insignificant Action).
 2. **Dynamic Motion Thresholds**:
    - Tune sensitivity on the fly without editing code using the `--motion-threshold` CLI flag or the `OPENPI_MOTION_THRESHOLD` environment variable.
+   - A chunk is SIGA when its normalized motion score is greater than or equal to the threshold. Therefore, a threshold of `0.0` intentionally produces a 100% SIGA condition.
 3. **IoTAuth Security & Session Key Caching**:
    - For `SIGA`, the monitor checks if an IoTAuth session key is cached and valid (verifying both absolute and relative validity timestamps).
    - If missing or expired, it opens an authentication socket to the Auth Server (using the entity configuration in `client.config`), negotiates a new cryptographic session key, and caches it.

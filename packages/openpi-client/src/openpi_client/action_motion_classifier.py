@@ -97,7 +97,7 @@ def classify_action_motion(
     inter = np.clip(inter, 0.0, 1.0)
     combined = np.maximum(intra, inter)
     combined_score = float(np.max(combined))
-    label = SIGA if combined_score > threshold else INSIGA
+    label = SIGA if combined_score >= threshold else INSIGA
     return ActionMotionAnalysis(
         label=label,
         execution_horizon=horizon,
@@ -107,5 +107,5 @@ def classify_action_motion(
         intra_per_dimension=np.ascontiguousarray(intra),
         inter_per_dimension=np.ascontiguousarray(inter),
         combined_per_dimension=np.ascontiguousarray(combined),
-        num_significant_dimensions=int(np.count_nonzero(combined > threshold)),
+        num_significant_dimensions=int(np.count_nonzero(combined >= threshold)),
     )
