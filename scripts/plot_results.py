@@ -519,7 +519,7 @@ def finalize_plot_layout(fig, aspect_1_1: bool = False):
     """Tightly lay out labels, then place legends away from plotted content."""
     if aspect_1_1:
         fig.tight_layout(rect=(0.02, 0.02, 0.98, 0.98), pad=1.2)
-        fig.subplots_adjust(left=0.18, bottom=0.15, right=0.95)
+        fig.subplots_adjust(left=0.18, bottom=0.15, right=0.95, top=0.98)
     else:
         fig.tight_layout(pad=LAYOUT_PADDING)
     keep_data_labels_inside_axes(fig)
@@ -529,11 +529,8 @@ def finalize_plot_layout(fig, aspect_1_1: bool = False):
 
 
 def save_plot(fig, output_path: Path, aspect_1_1: bool = False):
-    """Save plots with an exact square canvas when 1:1 output is requested."""
-    if aspect_1_1:
-        fig.savefig(output_path)
-    else:
-        fig.savefig(output_path, bbox_inches='tight', pad_inches=EXPORT_PADDING_INCHES)
+    """Save plots cropped tightly to labels and axes boundaries."""
+    fig.savefig(output_path, bbox_inches='tight', pad_inches=EXPORT_PADDING_INCHES)
 
 
 def print_plot_options(test_name: str, output_dir: Path, options: dict,
