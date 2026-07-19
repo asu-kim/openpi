@@ -63,11 +63,13 @@ DATA_LABEL_MIN_GAP_POINTS = 4
 LAYOUT_PADDING = 0.25
 EXPORT_PADDING_INCHES = 0.03
 # ==============================================================================
-# Y-AXIS DISPLAY NAME MACRO
-# Change this constant at source to customize the base name for latency y-axis labels across all graphs.
-# Examples: "Monitor-to-Actuator Latency", "Monitor-Actuator Latency", "Monitor Latency"
+# Y-AXIS AND TITLE DISPLAY NAME MACROS
+# Change these constants at source to customize the exact text displayed on graphs.
+# Nothing will be automatically added before or after Y_AXIS_LABEL_AVG and Y_AXIS_LABEL_WC!
 # ==============================================================================
-LATENCY_DISPLAY_NAME = "Monitor-Actuator Avg. Latency"
+LATENCY_DISPLAY_NAME = "Monitor-Actuator Latency"  # Used in plot titles and console logs
+Y_AXIS_LABEL_AVG = "Monitor-Actuator Avg. Latency (ms)"  # EXACT text for average latency y-axis
+Y_AXIS_LABEL_WC = "Monitor-Actuator Worst-Case Latency (ms)"  # EXACT text for worst-case latency y-axis
 
 
 def extract_latency_summary(content: str):
@@ -711,7 +713,7 @@ def _plot_single_mode(validities: list, avg_latencies: list, wc_latencies: list,
         optimize_annotations(texts1, ax=ax1)
 
         ax1.set_xlabel('Relative Validity Period (seconds)', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
-        ax1.set_ylabel(f'Avg {LATENCY_DISPLAY_NAME} (ms)', fontsize=AXIS_LABEL_FONT_SIZE, color=color_avg, labelpad=10)
+        ax1.set_ylabel(Y_AXIS_LABEL_AVG, fontsize=AXIS_LABEL_FONT_SIZE, color=color_avg, labelpad=10)
         ax1.tick_params(axis='y', labelcolor=color_avg)
         if not log_y:
             set_latency_y_limits(ax1, avg_latencies)
@@ -740,7 +742,7 @@ def _plot_single_mode(validities: list, avg_latencies: list, wc_latencies: list,
                                          xytext=(0, 12), color=color_wc))
         optimize_annotations(texts2, ax=ax2)
 
-        ax2.set_ylabel(f'Worst-Case {LATENCY_DISPLAY_NAME} (ms)', fontsize=AXIS_LABEL_FONT_SIZE,
+        ax2.set_ylabel(Y_AXIS_LABEL_WC, fontsize=AXIS_LABEL_FONT_SIZE,
                        color=color_wc, labelpad=10)
         ax2.tick_params(axis='y', labelcolor=color_wc)
         if not log_y:
@@ -903,7 +905,7 @@ def generate_comparative_plots(local_csv: Path, remote_csv: Path,
         optimize_annotations(texts, ax=ax)
 
         ax.set_xlabel('Relative Validity Period (seconds)', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
-        ax.set_ylabel(f'Average {LATENCY_DISPLAY_NAME} (ms)', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
+        ax.set_ylabel(Y_AXIS_LABEL_AVG, fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
         ax.set_xticks(x_coords)
         ax.set_xticklabels(
             x_labels,
@@ -958,7 +960,7 @@ def generate_comparative_plots(local_csv: Path, remote_csv: Path,
         optimize_annotations(texts, ax=ax)
 
         ax.set_xlabel('Relative Validity Period (seconds)', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
-        ax.set_ylabel(f'Worst-Case {LATENCY_DISPLAY_NAME} (ms)', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
+        ax.set_ylabel(Y_AXIS_LABEL_WC, fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
         ax.set_xticks(x_coords)
         ax.set_xticklabels(
             x_labels,
@@ -1185,7 +1187,7 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
         optimize_annotations(texts, ax=ax)
 
         ax.set_xlabel('Motion Threshold Value, Log scale', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
-        ax.set_ylabel(f'Average {LATENCY_DISPLAY_NAME} (ms)', fontsize=AXIS_LABEL_FONT_SIZE, color=color_lat, labelpad=10)
+        ax.set_ylabel(Y_AXIS_LABEL_AVG, fontsize=AXIS_LABEL_FONT_SIZE, color=color_lat, labelpad=10)
         set_threshold_x_ticks(ax, x_coords, thresholds, log_x)
         if equidistant_x:
             set_equidistant_x_limits(ax, len(x_coords))
@@ -1224,7 +1226,7 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
         optimize_annotations(texts, ax=ax)
 
         ax.set_xlabel('Motion Threshold Value, Log scale', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
-        ax.set_ylabel(f'Worst-Case {LATENCY_DISPLAY_NAME} (ms)', fontsize=AXIS_LABEL_FONT_SIZE, color=color_wc, labelpad=10)
+        ax.set_ylabel(Y_AXIS_LABEL_WC, fontsize=AXIS_LABEL_FONT_SIZE, color=color_wc, labelpad=10)
         set_threshold_x_ticks(ax, x_coords, thresholds, log_x)
         if equidistant_x:
             set_equidistant_x_limits(ax, len(x_coords))
@@ -1338,7 +1340,7 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
         optimize_annotations(texts, ax=ax)
 
         ax.set_xlabel('Motion Threshold Value, Log scale', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
-        ax.set_ylabel(f'Average {LATENCY_DISPLAY_NAME} (ms)', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
+        ax.set_ylabel(Y_AXIS_LABEL_AVG, fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
         set_threshold_x_ticks(ax, x_coords, common_t, log_x)
         if equidistant_x:
             set_equidistant_x_limits(ax, len(x_coords))
@@ -1385,7 +1387,7 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
         optimize_annotations(texts, ax=ax)
 
         ax.set_xlabel('Motion Threshold Value, Log scale', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
-        ax.set_ylabel(f'Worst-Case {LATENCY_DISPLAY_NAME} (ms)', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
+        ax.set_ylabel(Y_AXIS_LABEL_WC, fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
         set_threshold_x_ticks(ax, x_coords, common_t, log_x)
         if equidistant_x:
             set_equidistant_x_limits(ax, len(x_coords))
