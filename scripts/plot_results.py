@@ -70,6 +70,8 @@ EXPORT_PADDING_INCHES = 0.03
 LATENCY_DISPLAY_NAME = "Latency"  # Used in plot titles and console logs
 Y_AXIS_LABEL_AVG = "Average Latency (ms)"  # EXACT text for average latency y-axis
 Y_AXIS_LABEL_WC = "Worst-Case Latency (ms)"  # EXACT text for worst-case latency y-axis
+LEGEND_LABEL_LOCAL = "Decentralized"  # EXACT legend text for local auth mode
+LEGEND_LABEL_REMOTE = "Centralized"  # EXACT legend text for remote auth mode
 
 
 def extract_latency_summary(content: str):
@@ -937,9 +939,9 @@ def generate_comparative_plots(local_csv: Path, remote_csv: Path,
         color_remote = '#d62728'   # red
 
         ax.plot(x_coords, l_avg, marker='o', markersize=8, linewidth=2.5,
-                color=color_local, label='Local Auth')
+                color=color_local, label=LEGEND_LABEL_LOCAL)
         ax.plot(x_coords, r_avg, marker='s', markersize=8, linewidth=2.5,
-                color=color_remote, label='Remote Auth', linestyle='--')
+                color=color_remote, label=LEGEND_LABEL_REMOTE, linestyle='--')
         apply_log_scales(ax, x_coords, l_avg + r_avg, log_x=log_x, log_y=log_y)
 
         texts = []
@@ -991,9 +993,9 @@ def generate_comparative_plots(local_csv: Path, remote_csv: Path,
         color_remote = '#9467bd'   # purple
 
         ax.plot(x_coords, l_wc, marker='o', markersize=8, linewidth=2.5,
-                color=color_local, label='Local Auth')
+                color=color_local, label=LEGEND_LABEL_LOCAL)
         ax.plot(x_coords, r_wc, marker='s', markersize=8, linewidth=2.5,
-                color=color_remote, label='Remote Auth', linestyle='--')
+                color=color_remote, label=LEGEND_LABEL_REMOTE, linestyle='--')
         apply_log_scales(ax, x_coords, l_wc + r_wc, log_x=log_x, log_y=log_y)
 
         texts = []
@@ -1371,9 +1373,9 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
         if aspect_1_1:
             ax.set_box_aspect(1)
         ax.plot(x_coords, l_avg, marker='o', markersize=8, linewidth=2.5,
-                color='#1f77b4', label='Local Auth')
+                color='#1f77b4', label=LEGEND_LABEL_LOCAL)
         ax.plot(x_coords, r_avg, marker='s', markersize=8, linewidth=2.5,
-                color='#d62728', label='Remote Auth', linestyle='--')
+                color='#d62728', label=LEGEND_LABEL_REMOTE, linestyle='--')
         apply_log_scales(ax, x_coords, l_avg + r_avg, log_x=log_x, log_y=log_y)
 
         texts = []
@@ -1417,9 +1419,9 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
         if aspect_1_1:
             ax.set_box_aspect(1)
         ax.plot(x_coords, l_wc, marker='o', markersize=8, linewidth=2.5,
-                color='#2ca02c', label='Local Auth')
+                color='#2ca02c', label=LEGEND_LABEL_LOCAL)
         ax.plot(x_coords, r_wc, marker='s', markersize=8, linewidth=2.5,
-                color='#9467bd', label='Remote Auth', linestyle='--')
+                color='#9467bd', label=LEGEND_LABEL_REMOTE, linestyle='--')
         apply_log_scales(ax, x_coords, l_wc + r_wc, log_x=log_x, log_y=log_y)
 
         texts = []
