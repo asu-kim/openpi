@@ -62,8 +62,12 @@ DATA_LABEL_BOUNDARY_PADDING_POINTS = 4
 DATA_LABEL_MIN_GAP_POINTS = 4
 LAYOUT_PADDING = 0.25
 EXPORT_PADDING_INCHES = 0.03
-EQUIDISTANT_X_MARGIN = 0.12
-LATENCY_DISPLAY_NAME = "Monitor Latency"
+# ==============================================================================
+# Y-AXIS DISPLAY NAME MACRO
+# Change this constant at source to customize the base name for latency y-axis labels across all graphs.
+# Examples: "Monitor-to-Actuator Latency", "Monitor-Actuator Latency", "Monitor Latency"
+# ==============================================================================
+LATENCY_DISPLAY_NAME = "Monitor-Actuator Avg. Latency"
 
 
 def extract_latency_summary(content: str):
@@ -512,7 +516,8 @@ def apply_log_scales(ax, x_values: list, y_values: list,
 def finalize_plot_layout(fig, aspect_1_1: bool = False):
     """Tightly lay out labels, then place legends away from plotted content."""
     if aspect_1_1:
-        fig.tight_layout(rect=(0, 0.03, 1, 1), pad=LAYOUT_PADDING)
+        fig.tight_layout(rect=(0.02, 0.02, 0.98, 0.98), pad=1.2)
+        fig.subplots_adjust(left=0.18, bottom=0.15, right=0.95)
     else:
         fig.tight_layout(pad=LAYOUT_PADDING)
     keep_data_labels_inside_axes(fig)
@@ -1764,7 +1769,6 @@ def generate_test3_outputs(validities: list, thresholds: list, run_count: int,
 # ─────────────────────────────────────────────────────────────────────────────
 
 def main():
-    global LATENCY_DISPLAY_NAME
     parser = argparse.ArgumentParser(
         description="Aggregate latency report files and generate graphs. "
                     "Can be run standalone on any existing test_reports/ run folder."
@@ -1842,11 +1846,6 @@ def main():
         print(f"❌ Error: reports directory does not exist: {reports_dir}")
         sys.exit(1)
     output_dir.mkdir(parents=True, exist_ok=True)
-    if any(
-        "Average Monitor-Actuator Latency" in report.read_text()
-        for report in reports_dir.glob("*.txt")
-    ):
-        LATENCY_DISPLAY_NAME = "Monitor-Actuator Latency"
 
     inferred_test, inferred_mode, inferred_bypass = infer_test_context(reports_dir)
     test_name = args.test_name or inferred_test or "test1"
