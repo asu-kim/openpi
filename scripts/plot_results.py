@@ -34,6 +34,7 @@ import re
 import argparse
 import subprocess
 import tempfile
+import math
 from pathlib import Path
 
 # Central sizing for figures intended to be reduced from 6 inches to one
@@ -214,6 +215,17 @@ def annotate_point(ax, text, xy, xytext=(0, 12), color='black',
         ann.set_path_effects([path_effects.withStroke(linewidth=3, foreground='white')])
     ann.set_gid("data-label")
     return ann
+
+
+def get_comparison_label_offsets(val1: float, val2: float, all_vals: list) -> tuple[int, int]:
+    """Determine initial vertical offsets (in points) for two comparative data labels."""
+    if not all_vals:
+        return 12, 12
+    val_range = max(all_vals) - min(all_vals)
+    threshold = val_range * 0.08 if val_range > 0 else max(all_vals) * 0.08
+    if abs(val1 - val2) < max(threshold, 2.0):
+        return (14, -16) if val1 >= val2 else (-16, 14)
+    return 12, 12
 
 
 def optimize_annotations(texts, ax=None):
@@ -951,10 +963,13 @@ def generate_comparative_plots(local_csv: Path, remote_csv: Path,
 
         texts = []
         for i, val in enumerate(x_coords):
+            local_offset, remote_offset = get_comparison_label_offsets(
+                l_avg[i], r_avg[i], l_avg + r_avg
+            )
             texts.append(annotate_point(ax, f"{l_avg[i]:.2f}", (val, l_avg[i]),
-                                        xytext=(0, 12), color=color_local))
+                                        xytext=(0, local_offset), color=color_local))
             texts.append(annotate_point(ax, f"{r_avg[i]:.2f}", (val, r_avg[i]),
-                                        xytext=(0, 12), color=color_remote))
+                                        xytext=(0, remote_offset), color=color_remote))
         optimize_annotations(texts, ax=ax)
 
         ax.set_xlabel('Relative Validity Period (seconds)', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
@@ -1005,10 +1020,13 @@ def generate_comparative_plots(local_csv: Path, remote_csv: Path,
 
         texts = []
         for i, val in enumerate(x_coords):
+            local_offset, remote_offset = get_comparison_label_offsets(
+                l_wc[i], r_wc[i], l_wc + r_wc
+            )
             texts.append(annotate_point(ax, f"{l_wc[i]:.2f}", (val, l_wc[i]),
-                                        xytext=(0, 12), color=color_local))
+                                        xytext=(0, local_offset), color=color_local))
             texts.append(annotate_point(ax, f"{r_wc[i]:.2f}", (val, r_wc[i]),
-                                        xytext=(0, 12), color=color_remote))
+                                        xytext=(0, remote_offset), color=color_remote))
         optimize_annotations(texts, ax=ax)
 
         ax.set_xlabel('Relative Validity Period (seconds)', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
