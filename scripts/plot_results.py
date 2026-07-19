@@ -452,30 +452,66 @@ def set_equidistant_x_limits(ax, point_count: int):
         ax.set_xlim(-EQUIDISTANT_X_MARGIN, point_count - 1 + EQUIDISTANT_X_MARGIN)
 
 
-def get_comparison_label_offsets(first_value: float, second_value: float,
-                                 all_values: list) -> tuple[int, int]:
-    """Vertically stagger centered labels only when two series nearly overlap."""
-    if not all_values:
-        return 12, 12
-
-    value_span = max(all_values) - min(all_values)
-    overlap_threshold = value_span * COMPARISON_LABEL_OVERLAP_FRACTION
-    if value_span > 0 and abs(first_value - second_value) > overlap_threshold:
-        return 12, 12
-
-    if first_value >= second_value:
-        return 30, 12
-    return 12, 30
+def set_transformed_x_limits(ax, x_coords: list, equidistant_x: bool = False,
+                             power_x: bool = False, cbrt_x: bool = False,
+                             hybrid_x: bool = False, **kwargs):
+    """Ensure clean padding on both ends for non-log transformed x coordinates."""
+    if not x_coords:
+        return
+    if equidistant_x:
+        set_equidistant_x_limits(ax, len(x_coords))
+        return
+    if power_x or cbrt_x or hybrid_x:
+        min_x, max_x = min(x_coords), max(x_coords)
+        if min_x == max_x:
+            ax.set_xlim(min_x - 0.5, max_x + 0.5)
+        else:
+            span = max_x - min_x
+            margin = span * 0.06
+            ax.set_xlim(min_x - margin, max_x + margin)
 
 
 def get_x_coordinates(values: list, equidistant_x: bool = False,
-                      log_x: bool = False) -> list:
+                      log_x: bool = False, power_x: bool = False,
+                      cbrt_x: bool = False, hybrid_x: bool = False,
+                      **kwargs) -> list:
     """Return plot coordinates without changing the source values or labels."""
     if equidistant_x:
         return list(range(len(values)))
+    if power_x:
+        return [float(value) ** 0.5 for value in values]
+    if cbrt_x:
+        return [float(value) ** (1.0 / 3.0) for value in values]
+    if hybrid_x:
+        if not values:
+            return []
+        n = len(values)
+        if n == 1:
+            return [0.0]
+        log_vals = [math.log10(LOG_X_ZERO_FLOOR if float(v) == 0 else float(v)) for v in values]
+        min_l, max_l = min(log_vals), max(log_vals)
+        span_l = max_l - min_l if max_l > min_l else 1.0
+        norm_logs = [(lv - min_l) / span_l * (n - 1) for lv in log_vals]
+        return [0.5 * rank + 0.5 * nl for rank, nl in enumerate(norm_logs)]
     if log_x:
         return [LOG_X_ZERO_FLOOR if float(value) == 0 else value for value in values]
     return values
+
+
+def get_threshold_x_label(equidistant_x: bool = False, log_x: bool = False,
+                          power_x: bool = False, cbrt_x: bool = False,
+                          hybrid_x: bool = False, **kwargs) -> str:
+    if equidistant_x:
+        return "Motion Threshold Value (Categorical)"
+    if power_x:
+        return "Motion Threshold Value (Square Root Scale)"
+    if cbrt_x:
+        return "Motion Threshold Value (Cube Root Scale)"
+    if hybrid_x:
+        return "Motion Threshold Value (Hybrid Scale)"
+    if log_x:
+        return "Motion Threshold Value, Log scale"
+    return "Motion Threshold Value (Linear Scale)"
 
 
 def set_threshold_x_ticks(ax, x_coords: list, thresholds: list,
@@ -483,7 +519,7 @@ def set_threshold_x_ticks(ax, x_coords: list, thresholds: list,
     """Render compact, readable threshold labels without changing coordinates."""
     if log_x:
         labels = [
-            f"{LOG_X_ZERO_FLOOR:.10g}" if float(value) == 0 else f"{float(value):.10g}"
+            "0.000" if float(value) == 0 else f"{float(value):.10g}"
             for value in thresholds
         ]
     else:
@@ -550,8 +586,14 @@ def print_plot_options(test_name: str, output_dir: Path, options: dict,
         print(f"   Output : {output_dir}")
         return
 
-    x_scale = "equidistant" if options["equidistant_x"] else (
-        "logarithmic" if options["log_x"] else "linear"
+    x_scale = "equidistant" if options.get("equidistant_x") else (
+        "square-root" if options.get("power_x") else (
+            "cube-root" if options.get("cbrt_x") else (
+                "hybrid" if options.get("hybrid_x") else (
+                    "logarithmic" if options.get("log_x") else "linear"
+                )
+            )
+        )
     )
     y_scale = "logarithmic" if options["log_y"] else "linear"
     print(f"📐 {test_name.upper()} graph configuration for this run:")
@@ -691,8 +733,10 @@ def read_test1_csv(csv_path: Path) -> tuple[list, list, list]:
 def _plot_single_mode(validities: list, avg_latencies: list, wc_latencies: list,
                       output_dir: Path, test_name: str, auth_mode: str,
                       equidistant_x: bool = False,
+                      power_x: bool = False, cbrt_x: bool = False,
+                      hybrid_x: bool = False,
                       aspect_1_1: bool = False, no_title: bool = False,
-                      log_x: bool = False, log_y: bool = False):
+                      log_x: bool = False, log_y: bool = False, **kwargs):
     """Render the single-mode graph (avg latency + worst-case on twin axes) from CSV data."""
     try:
         color_avg = '#1f77b4'
@@ -703,7 +747,7 @@ def _plot_single_mode(validities: list, avg_latencies: list, wc_latencies: list,
         if aspect_1_1:
             ax1.set_box_aspect(1)
 
-        x_coords = get_x_coordinates(validities, equidistant_x, log_x)
+        x_coords = get_x_coordinates(validities, equidistant_x, log_x, power_x, cbrt_x, hybrid_x)
         x_labels = [f"{int(v)}s" for v in validities]
 
         ax1.plot(x_coords, avg_latencies,
@@ -730,8 +774,7 @@ def _plot_single_mode(validities: list, avg_latencies: list, wc_latencies: list,
             ),
             rotation_mode="anchor",
         )
-        if equidistant_x:
-            set_equidistant_x_limits(ax1, len(x_coords))
+        set_transformed_x_limits(ax1, x_coords, equidistant_x, power_x, cbrt_x, hybrid_x)
         ax1.grid(True, linestyle='--', alpha=0.4)
 
         ax2 = ax1.twinx()
@@ -879,7 +922,7 @@ def generate_comparative_plots(local_csv: Path, remote_csv: Path,
     r_avg = [remote_map_avg[v] for v in common_v]
     r_wc  = [remote_map_wc[v]  for v in common_v]
 
-    x_coords = get_x_coordinates(common_v, equidistant_x, log_x)
+    x_coords = get_x_coordinates(common_v, equidistant_x, log_x, power_x, cbrt_x, hybrid_x)
     x_labels   = [f"{int(v)}s" for v in common_v]
     test_label = test_name.upper()
     figsize = SQUARE_FIGURE_SIZE if aspect_1_1 else STANDARD_FIGURE_SIZE
@@ -919,8 +962,7 @@ def generate_comparative_plots(local_csv: Path, remote_csv: Path,
             ),
             rotation_mode="anchor",
         )
-        if equidistant_x:
-            set_equidistant_x_limits(ax, len(x_coords))
+        set_transformed_x_limits(ax, x_coords, equidistant_x, power_x, cbrt_x, hybrid_x)
         if not log_y:
             set_latency_y_limits(ax, l_avg + r_avg)
         ax.grid(True, linestyle='--', alpha=0.4)
@@ -974,8 +1016,7 @@ def generate_comparative_plots(local_csv: Path, remote_csv: Path,
             ),
             rotation_mode="anchor",
         )
-        if equidistant_x:
-            set_equidistant_x_limits(ax, len(x_coords))
+        set_transformed_x_limits(ax, x_coords, equidistant_x, power_x, cbrt_x, hybrid_x)
         if not log_y:
             set_latency_y_limits(ax, l_wc + r_wc)
         ax.grid(True, linestyle='--', alpha=0.4)
@@ -1160,10 +1201,12 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
                             output_dir: Path, test_name: str, auth_mode: str,
                             show_active: bool = False, show_still: bool = False,
                             equidistant_x: bool = False,
+                            power_x: bool = False, cbrt_x: bool = False,
+                            hybrid_x: bool = False,
                             aspect_1_1: bool = False,
                             no_title: bool = False,
                             log_x: bool = False,
-                            log_y: bool = False):
+                            log_y: bool = False, **kwargs):
     """Render two separate single-mode graphs for Test 2: Average Latency & Worst-Case Latency."""
     if not MATPLOTLIB_AVAILABLE:
         print("\n⚠️  Warning: matplotlib is not available.")
@@ -1173,7 +1216,8 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
     mode_label = auth_mode.capitalize() + " Auth"
     figsize = SQUARE_FIGURE_SIZE if aspect_1_1 else STANDARD_FIGURE_SIZE
 
-    x_coords = get_x_coordinates(thresholds, equidistant_x, log_x)
+    x_coords = get_x_coordinates(thresholds, equidistant_x, log_x, power_x, cbrt_x, hybrid_x)
+    xlabel = get_threshold_x_label(equidistant_x, log_x, power_x, cbrt_x, hybrid_x)
     # ── Graph 1: Average Monitor Latency vs. Threshold ───────────────────────
     try:
         color_lat = '#1f77b4'
@@ -1189,11 +1233,10 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
                                         xytext=(0, 12), color=color_lat))
         optimize_annotations(texts, ax=ax)
 
-        ax.set_xlabel('Motion Threshold Value, Log scale', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
+        ax.set_xlabel(xlabel, fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
         ax.set_ylabel(Y_AXIS_LABEL_AVG, fontsize=AXIS_LABEL_FONT_SIZE, color=color_lat, labelpad=10)
         set_threshold_x_ticks(ax, x_coords, thresholds, log_x)
-        if equidistant_x:
-            set_equidistant_x_limits(ax, len(x_coords))
+        set_transformed_x_limits(ax, x_coords, equidistant_x, power_x, cbrt_x, hybrid_x)
         if not log_y:
             set_latency_y_limits(ax, avg_latencies)
         ax.grid(True, linestyle='--', alpha=0.4)
@@ -1228,11 +1271,10 @@ def _plot_test2_single_mode(thresholds: list, avg_latencies: list, wc_latencies:
                                         xytext=(0, 12), color=color_wc))
         optimize_annotations(texts, ax=ax)
 
-        ax.set_xlabel('Motion Threshold Value, Log scale', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
+        ax.set_xlabel(xlabel, fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
         ax.set_ylabel(Y_AXIS_LABEL_WC, fontsize=AXIS_LABEL_FONT_SIZE, color=color_wc, labelpad=10)
         set_threshold_x_ticks(ax, x_coords, thresholds, log_x)
-        if equidistant_x:
-            set_equidistant_x_limits(ax, len(x_coords))
+        set_transformed_x_limits(ax, x_coords, equidistant_x, power_x, cbrt_x, hybrid_x)
         if not log_y:
             set_latency_y_limits(ax, wc_latencies)
         ax.grid(True, linestyle='--', alpha=0.4)
@@ -1257,11 +1299,13 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
                                      output_dir: Path, test_name: str = "test2",
                                      show_active: bool = False, show_still: bool = False,
                                      equidistant_x: bool = False,
+                                     power_x: bool = False, cbrt_x: bool = False,
+                                     hybrid_x: bool = False,
                                      aspect_1_1: bool = False,
                                      no_title: bool = False,
                                      log_x: bool = False,
                                      log_y: bool = False,
-                                     primary_auth_mode: str = "local"):
+                                     primary_auth_mode: str = "local", **kwargs):
     """Generate two separate comparative plots for Test 2 from threshold_vs_latency.csv files."""
     if not MATPLOTLIB_AVAILABLE:
         print("\n⚠️  Warning: matplotlib is not available — comparative plots skipped.")
@@ -1316,7 +1360,8 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
             plot_act = [local_map_act[t] for t in common_t]
             plot_st = [local_map_st[t] for t in common_t]
 
-    x_coords = get_x_coordinates(common_t, equidistant_x, log_x)
+    x_coords = get_x_coordinates(common_t, equidistant_x, log_x, power_x, cbrt_x, hybrid_x)
+    xlabel = get_threshold_x_label(equidistant_x, log_x, power_x, cbrt_x, hybrid_x)
     test_label = test_name.upper()
     figsize = SQUARE_FIGURE_SIZE if aspect_1_1 else STANDARD_FIGURE_SIZE
 
@@ -1342,11 +1387,10 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
                                         xytext=(0, remote_offset), color='#d62728'))
         optimize_annotations(texts, ax=ax)
 
-        ax.set_xlabel('Motion Threshold Value, Log scale', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
+        ax.set_xlabel(xlabel, fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
         ax.set_ylabel(Y_AXIS_LABEL_AVG, fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
         set_threshold_x_ticks(ax, x_coords, common_t, log_x)
-        if equidistant_x:
-            set_equidistant_x_limits(ax, len(x_coords))
+        set_transformed_x_limits(ax, x_coords, equidistant_x, power_x, cbrt_x, hybrid_x)
         if not log_y:
             set_latency_y_limits(ax, l_avg + r_avg)
         ax.grid(True, linestyle='--', alpha=0.4)
@@ -1389,11 +1433,10 @@ def generate_test2_comparative_plots(local_csv: Path, remote_csv: Path,
                                         xytext=(0, remote_offset), color='#9467bd'))
         optimize_annotations(texts, ax=ax)
 
-        ax.set_xlabel('Motion Threshold Value, Log scale', fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
+        ax.set_xlabel(xlabel, fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
         ax.set_ylabel(Y_AXIS_LABEL_WC, fontsize=AXIS_LABEL_FONT_SIZE, labelpad=10)
         set_threshold_x_ticks(ax, x_coords, common_t, log_x)
-        if equidistant_x:
-            set_equidistant_x_limits(ax, len(x_coords))
+        set_transformed_x_limits(ax, x_coords, equidistant_x, power_x, cbrt_x, hybrid_x)
         if not log_y:
             set_latency_y_limits(ax, l_wc + r_wc)
         ax.grid(True, linestyle='--', alpha=0.4)
@@ -1421,6 +1464,8 @@ def generate_test2_plots_and_reports(thresholds: list, results: dict, worst_case
                                      auth_mode: str = "local",
                                      show_active: bool = False, show_still: bool = False,
                                      equidistant_x: bool = False,
+                                     power_x: bool = False, cbrt_x: bool = False,
+                                     hybrid_x: bool = False,
                                      aspect_1_1: bool = False,
                                      no_title: bool = False,
                                      log_x: bool = False,
@@ -1581,65 +1626,65 @@ def discover_test3_reports(reports_dir: Path) -> tuple[list, list, int, dict]:
     results = {(validity, threshold): []
                for threshold in sorted_thresholds
                for validity in sorted_validities}
+    wc_results = {(validity, threshold): []
+                  for threshold in sorted_thresholds
+                  for validity in sorted_validities}
     for threshold in sorted_thresholds:
         for validity in sorted_validities:
             for run in range(1, max_run + 1):
                 report_file = discovered[(validity, threshold, run)]
-                match, _ = extract_latency_summary(report_file.read_text())
-                if not match:
-                    print("❌ Error: no supported average latency metric was found in "
+                match, wc_match = extract_latency_summary(report_file.read_text())
+                if not match or not wc_match:
+                    print("❌ Error: missing average or worst-case latency metric in "
                           f"{report_file}")
                     sys.exit(1)
                 latency = float(match.group(1))
+                wc_latency = float(wc_match.group(1))
                 results[(validity, threshold)].append(latency)
-                print(f"✅ Loaded {report_file.name} -> avg: {latency:.2f} ms")
+                wc_results[(validity, threshold)].append(wc_latency)
+                print(f"✅ Loaded {report_file.name} -> avg: {latency:.2f} ms | wc: {wc_latency:.2f} ms")
 
     print("🔍 Auto-discovered Test 3: "
           f"validities={[f'{value:g}' for value in sorted_validities]}s, "
           f"thresholds={[f'{value:g}' for value in sorted_thresholds]}, "
           f"runs={max_run} per cell")
-    return sorted_validities, sorted_thresholds, max_run, results
+    return sorted_validities, sorted_thresholds, max_run, results, wc_results
 
 
 def write_test3_csv(validities: list, thresholds: list, run_count: int,
-                    averages: dict, output_dir: Path) -> Path:
+                    averages: dict, wc_averages: dict, output_dir: Path) -> Path:
     csv_path = output_dir / TEST3_CSV_NAME
     with open(csv_path, "w") as csv_file:
         csv_file.write(
-            "Validity_s,Threshold,Run_Count,Average_Monitor_Latency_ms\n"
+            "Validity_s,Threshold,Run_Count,Average_Monitor_Latency_ms,Worst_Case_Monitor_Latency_ms\n"
         )
         for threshold in thresholds:
             for validity in validities:
+                wc_val = wc_averages[(validity, threshold)] if wc_averages else averages[(validity, threshold)]
                 csv_file.write(
                     f"{validity:g},{threshold:.10g},{run_count},"
-                    f"{averages[(validity, threshold)]:.4f}\n"
+                    f"{averages[(validity, threshold)]:.4f},{wc_val:.4f}\n"
                 )
     print(f"📊 CSV saved to: {csv_path}")
     return csv_path
 
 
-def read_test3_csv(csv_path: Path) -> tuple[list, list, dict, dict]:
+def read_test3_csv(csv_path: Path) -> tuple[list, list, dict, dict, dict]:
     validities = set()
     thresholds = set()
     run_counts = {}
     averages = {}
+    wc_averages = {}
 
     with open(csv_path) as csv_file:
         header = csv_file.readline().strip().split(",")
-        expected_header = [
-            "Validity_s", "Threshold", "Run_Count",
-            "Average_Monitor_Latency_ms",
-        ]
-        if header != expected_header:
-            raise ValueError(
-                f"Unexpected Test 3 CSV header in {csv_path}: {header}"
-            )
+        has_wc = len(header) >= 5
         for line_number, line in enumerate(csv_file, start=2):
             line = line.strip()
             if not line:
                 continue
             parts = line.split(",")
-            if len(parts) != 4:
+            if len(parts) < 4:
                 raise ValueError(
                     f"Invalid Test 3 CSV row at {csv_path}:{line_number}"
                 )
@@ -1652,6 +1697,10 @@ def read_test3_csv(csv_path: Path) -> tuple[list, list, dict, dict]:
             thresholds.add(threshold)
             run_counts[key] = int(parts[2])
             averages[key] = float(parts[3])
+            if has_wc and len(parts) >= 5:
+                wc_averages[key] = float(parts[4])
+            else:
+                wc_averages = None
 
     sorted_validities = sorted(validities)
     sorted_thresholds = sorted(thresholds)
@@ -1669,16 +1718,12 @@ def read_test3_csv(csv_path: Path) -> tuple[list, list, dict, dict]:
         )
         raise ValueError(f"Test 3 CSV is missing cells: {missing_text}")
 
-    return sorted_validities, sorted_thresholds, run_counts, averages
+    return sorted_validities, sorted_thresholds, run_counts, averages, wc_averages
 
 
-def plot_test3_heatmap(csv_path: Path, output_dir: Path, auth_mode: str,
-                       no_title: bool = False) -> None:
-    if not MATPLOTLIB_AVAILABLE:
-        print("\n⚠️  Warning: matplotlib is not available — heatmap skipped.")
-        return
-
-    validities, thresholds, _, averages = read_test3_csv(csv_path)
+def _render_single_test3_heatmap(validities: list, thresholds: list,
+                                 averages: dict, output_dir: Path, auth_mode: str,
+                                 is_wc: bool = False, no_title: bool = False) -> None:
     matrix = [
         [averages[(validity, threshold)] for validity in validities]
         for threshold in thresholds
@@ -1715,32 +1760,59 @@ def plot_test3_heatmap(csv_path: Path, output_dir: Path, auth_mode: str,
             )
 
     colorbar = fig.colorbar(image, ax=ax, fraction=0.046, pad=0.04)
+    display_name = Y_AXIS_LABEL_WC if is_wc else f"Average {LATENCY_DISPLAY_NAME} (ms)"
     colorbar.set_label(
-        f"Average {LATENCY_DISPLAY_NAME} (ms)",
+        display_name,
         fontsize=HEATMAP_COLORBAR_LABEL_FONT_SIZE,
     )
     colorbar.ax.tick_params(labelsize=HEATMAP_COLORBAR_TICK_FONT_SIZE)
     if not no_title:
+        title_prefix = "Worst-Case " if is_wc else ""
         fig.suptitle(
-            f"TEST3 {LATENCY_DISPLAY_NAME} Heatmap — {auth_mode.capitalize()} Auth",
+            f"TEST3 {title_prefix}{LATENCY_DISPLAY_NAME} Heatmap — {auth_mode.capitalize()} Auth",
             fontsize=HEATMAP_TITLE_FONT_SIZE, fontweight="bold", y=0.98,
         )
     fig.tight_layout(rect=(0, 0, 1, 0.95) if not no_title else None,
                      pad=LAYOUT_PADDING)
 
-    file_stem = f"test3_{auth_mode}_validity_threshold_latency_heatmap"
+    if is_wc:
+        file_stem = f"test3_{auth_mode}_validity_threshold_wc_latency_heatmap"
+    else:
+        file_stem = f"test3_{auth_mode}_validity_threshold_latency_heatmap"
     save_plot(fig, output_dir / f"{file_stem}.png")
     save_plot(fig, output_dir / f"{file_stem}.pdf")
     plt.close(fig)
-    print(f"🌡️  Heatmap saved to: {output_dir / file_stem}.png / .pdf")
+    print(f"🌡️  {'Worst-Case ' if is_wc else 'Average '}Heatmap saved to: {output_dir / file_stem}.png / .pdf")
+
+
+def plot_test3_heatmap(csv_path: Path, output_dir: Path, auth_mode: str,
+                       no_title: bool = False) -> None:
+    if not MATPLOTLIB_AVAILABLE:
+        print("\n⚠️  Warning: matplotlib is not available — heatmap skipped.")
+        return
+
+    validities, thresholds, _, averages, wc_averages = read_test3_csv(csv_path)
+    _render_single_test3_heatmap(
+        validities, thresholds, averages, output_dir, auth_mode,
+        is_wc=False, no_title=no_title
+    )
+    if wc_averages is not None and len(wc_averages) == len(averages):
+        _render_single_test3_heatmap(
+            validities, thresholds, wc_averages, output_dir, auth_mode,
+            is_wc=True, no_title=no_title
+        )
 
 
 def generate_test3_outputs(validities: list, thresholds: list, run_count: int,
-                           results: dict, output_dir: Path, auth_mode: str,
+                           results: dict, wc_results: dict, output_dir: Path, auth_mode: str,
                            no_title: bool = False) -> Path:
     averages = {
         key: sum(run_latencies) / len(run_latencies)
         for key, run_latencies in results.items()
+    }
+    wc_averages = {
+        key: sum(run_latencies) / len(run_latencies)
+        for key, run_latencies in wc_results.items()
     }
 
     report_path = output_dir / "validity_threshold_latency_report.txt"
@@ -1751,19 +1823,19 @@ def generate_test3_outputs(validities: list, thresholds: list, run_count: int,
         report_file.write(f"Runs per cell: {run_count}\n\n")
         report_file.write(
             f"{'Validity (s)':>12} | {'Threshold':>12} | "
-            f"{'Runs':>6} | {f'Average {LATENCY_DISPLAY_NAME} (ms)':>40}\n"
+            f"{'Runs':>6} | {f'Avg {LATENCY_DISPLAY_NAME} (ms)':>32} | {f'WC {LATENCY_DISPLAY_NAME} (ms)':>32}\n"
         )
-        report_file.write("-" * 69 + "\n")
+        report_file.write("-" * 102 + "\n")
         for threshold in thresholds:
             for validity in validities:
                 report_file.write(
                     f"{validity:>12g} | {threshold:>12.10g} | "
-                    f"{run_count:>6} | {averages[(validity, threshold)]:>28.4f}\n"
+                    f"{run_count:>6} | {averages[(validity, threshold)]:>32.4f} | {wc_averages[(validity, threshold)]:>32.4f}\n"
                 )
     print(f"📄 Text report saved to: {report_path}")
 
     csv_path = write_test3_csv(
-        validities, thresholds, run_count, averages, output_dir
+        validities, thresholds, run_count, averages, wc_averages, output_dir
     )
     plot_test3_heatmap(csv_path, output_dir, auth_mode, no_title=no_title)
     return csv_path
@@ -1825,10 +1897,22 @@ def main():
         help="Plot Test 2 x-axis points at equidistant categorical intervals rather than continuous numerical positions on the number line."
     )
     parser.add_argument(
+        "--power-x", "--sqrt-x", action="store_true", dest="power_x",
+        help="Plot Test 2 x-axis points using a square-root / power scale (values ** 0.5) to compress zero gaps while widening clustered values."
+    )
+    parser.add_argument(
+        "--cbrt-x", "--cube-root-x", action="store_true", dest="cbrt_x",
+        help="Plot Test 2 x-axis points using a cube-root scale (values ** (1/3)) for extra spacing among clustered thresholds."
+    )
+    parser.add_argument(
+        "--hybrid-x", action="store_true", dest="hybrid_x",
+        help="Plot Test 2 x-axis points using a hybrid scale (50%% categorical rank + 50%% logarithmic spacing) for guaranteed label separation with natural ordering."
+    )
+    parser.add_argument(
         "--log-x", action="store_true", dest="log_x",
         help="Use base-10 logarithmic spacing on the Test 2 threshold x-axis. "
              "Test 1 always uses a linear validity-period x-axis. Zero Test 2 "
-             "values are plotted at 0.0001 while retaining their original labels."
+             "values are plotted at 0.0001 and displayed as 0.000."
     )
     parser.add_argument(
         "--log-y", action="store_true", dest="log_y",
@@ -1887,15 +1971,19 @@ def main():
     if is_test2:
         test_name = "test2"
 
-    if is_test2 and args.equidistant_x and args.log_x:
-        parser.error("--equidistant-x and --log-x cannot be used together")
-    if is_test3 and (args.equidistant_x or args.log_x or args.log_y):
+    active_x_scales = sum([args.equidistant_x, args.power_x, args.cbrt_x, args.hybrid_x, args.log_x])
+    if is_test2 and active_x_scales > 1:
+        parser.error("Only one x-axis scaling option (--log-x, --equidistant-x, --power-x, --cbrt-x, --hybrid-x) can be used at a time.")
+    if is_test3 and active_x_scales > 0:
         print("ℹ️  Ignoring axis-spacing options for Test 3; both heatmap axes are categorical.")
-    elif not is_test2 and args.log_x:
-        print("ℹ️  Ignoring --log-x for Test 1; its validity-period x-axis is always linear.")
+    elif not is_test2 and (args.log_x or args.power_x or args.cbrt_x or args.hybrid_x):
+        print("ℹ️  Ignoring x-axis scaling options for Test 1; its validity-period x-axis is always linear.")
 
     plot_options = {
         "equidistant_x": args.equidistant_x,
+        "power_x": args.power_x if is_test2 else False,
+        "cbrt_x": args.cbrt_x if is_test2 else False,
+        "hybrid_x": args.hybrid_x if is_test2 else False,
         "aspect_1_1": args.aspect_1_1,
         "no_title": args.no_title,
         "log_x": args.log_x if is_test2 else False,
@@ -1928,22 +2016,28 @@ def main():
             reports_dir, output_dir, TEST3_CSV_NAME
         )
         if primary_csv:
-            print(f"♻️  Existing Test 3 CSV found: {primary_csv}")
-            print("   Skipping report aggregation and CSV generation.")
-            try:
-                plot_test3_heatmap(
-                    primary_csv, output_dir, auth_mode,
-                    no_title=args.no_title,
-                )
-            except ValueError as error:
-                print(f"❌ Error reading Test 3 CSV: {error}")
-                sys.exit(1)
-        else:
-            validities, thresholds, runs, results = discover_test3_reports(
+            validities, thresholds, _, averages, wc_averages = read_test3_csv(primary_csv)
+            if wc_averages is None and list(reports_dir.glob("val_*s_thresh_*_run_*.txt")):
+                print(f"ℹ️  Existing Test 3 CSV ({primary_csv.name}) lacks Worst-Case Latency column.")
+                print("   Re-aggregating from raw .txt report files to generate both Average and Worst-Case heatmaps...")
+                primary_csv = None
+            else:
+                print(f"♻️  Existing Test 3 CSV found: {primary_csv}")
+                print("   Skipping report aggregation and CSV generation.")
+                try:
+                    plot_test3_heatmap(
+                        primary_csv, output_dir, auth_mode,
+                        no_title=args.no_title,
+                    )
+                except ValueError as error:
+                    print(f"❌ Error reading Test 3 CSV: {error}")
+                    sys.exit(1)
+        if not primary_csv:
+            validities, thresholds, runs, results, wc_results = discover_test3_reports(
                 reports_dir
             )
             print("=" * 80)
-            print("AGGREGATING TEST 3 REPORTS & GENERATING LATENCY HEATMAP")
+            print("AGGREGATING TEST 3 REPORTS & GENERATING LATENCY HEATMAPS")
             print("=" * 80)
             print(f"Reports dir : {reports_dir}")
             print(f"Output dir  : {output_dir}")
@@ -1954,7 +2048,7 @@ def main():
             print(f"Test / Mode : {test_name} / {auth_mode}")
             print("=" * 80)
             generate_test3_outputs(
-                validities, thresholds, runs, results, output_dir, auth_mode,
+                validities, thresholds, runs, results, wc_results, output_dir, auth_mode,
                 no_title=args.no_title,
             )
     elif is_test2:
