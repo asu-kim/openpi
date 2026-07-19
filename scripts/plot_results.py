@@ -435,7 +435,7 @@ def position_collision_aware_legends(fig):
     fig.canvas.draw()
 
 
-LOG_X_ZERO_FLOOR = 0.001
+LOG_X_ZERO_FLOOR = 0.0001
 LATENCY_Y_HEADROOM_FACTOR = 1.12
 COMPARISON_LABEL_OVERLAP_FRACTION = 0.04
 
@@ -481,7 +481,13 @@ def get_x_coordinates(values: list, equidistant_x: bool = False,
 def set_threshold_x_ticks(ax, x_coords: list, thresholds: list,
                           log_x: bool = False):
     """Render compact, readable threshold labels without changing coordinates."""
-    labels = [f"{float(value):.10g}" for value in thresholds]
+    if log_x:
+        labels = [
+            f"{LOG_X_ZERO_FLOOR:.10g}" if float(value) == 0 else f"{float(value):.10g}"
+            for value in thresholds
+        ]
+    else:
+        labels = [f"{float(value):.10g}" for value in thresholds]
     ax.set_xticks(x_coords)
     ax.set_xticklabels(
         labels,
@@ -1822,7 +1828,7 @@ def main():
         "--log-x", action="store_true", dest="log_x",
         help="Use base-10 logarithmic spacing on the Test 2 threshold x-axis. "
              "Test 1 always uses a linear validity-period x-axis. Zero Test 2 "
-             "values are plotted at 0.001 while retaining their original labels."
+             "values are plotted at 0.0001 while retaining their original labels."
     )
     parser.add_argument(
         "--log-y", action="store_true", dest="log_y",
