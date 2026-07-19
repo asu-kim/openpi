@@ -818,6 +818,8 @@ def generate_plots_and_reports(validities: list, results: dict, worst_case_resul
                                 output_dir: Path, test_name: str = "test1",
                                 auth_mode: str = "local",
                                 equidistant_x: bool = False,
+                                power_x: bool = False, cbrt_x: bool = False,
+                                hybrid_x: bool = False,
                                 aspect_1_1: bool = False,
                                 no_title: bool = False,
                                 log_x: bool = False,
@@ -876,8 +878,9 @@ def generate_plots_and_reports(validities: list, results: dict, worst_case_resul
     v, avg_lats, wc_lats = read_test1_csv(csv_path)
     _plot_single_mode(
         v, avg_lats, wc_lats, output_dir, test_name, auth_mode,
-        equidistant_x=equidistant_x, aspect_1_1=aspect_1_1,
-        no_title=no_title, log_x=log_x, log_y=log_y
+        equidistant_x=equidistant_x, power_x=power_x, cbrt_x=cbrt_x,
+        hybrid_x=hybrid_x, aspect_1_1=aspect_1_1,
+        no_title=no_title, log_x=log_x, log_y=log_y, **kwargs
     )
 
     return csv_path
@@ -886,6 +889,8 @@ def generate_plots_and_reports(validities: list, results: dict, worst_case_resul
 def generate_comparative_plots(local_csv: Path, remote_csv: Path,
                                output_dir: Path, test_name: str = "test1",
                                equidistant_x: bool = False,
+                               power_x: bool = False, cbrt_x: bool = False,
+                               hybrid_x: bool = False,
                                aspect_1_1: bool = False,
                                no_title: bool = False,
                                log_x: bool = False,
