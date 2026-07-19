@@ -392,6 +392,18 @@ def _legend_collision_score(fig, legend, owner_ax) -> float:
 
 def add_collision_aware_legend(ax, handles=None, labels=None):
     """Add an upper-right legend whose clearance is resolved during layout."""
+    if handles is None or labels is None:
+        handles, labels = ax.get_legend_handles_labels()
+
+    if LEGEND_LABEL_REMOTE in labels and LEGEND_LABEL_LOCAL in labels:
+        sorted_pairs = []
+        for h, l in zip(handles, labels):
+            if l == LEGEND_LABEL_REMOTE:
+                sorted_pairs.insert(0, (h, l))
+            else:
+                sorted_pairs.append((h, l))
+        handles, labels = [p[0] for p in sorted_pairs], [p[1] for p in sorted_pairs]
+
     kwargs = {
         "frameon": True,
         "facecolor": "white",
@@ -399,8 +411,6 @@ def add_collision_aware_legend(ax, handles=None, labels=None):
         "fontsize": LEGEND_FONT_SIZE,
     }
     ax._collision_legend_spec = (handles, labels, kwargs)
-    if handles is None:
-        return ax.legend(loc=LEGEND_LOCATION, **kwargs)
     return ax.legend(handles, labels, loc=LEGEND_LOCATION, **kwargs)
 
 
@@ -522,7 +532,7 @@ def get_threshold_x_label(equidistant_x: bool = False, log_x: bool = False,
     if cbrt_x:
         return "Motion Threshold Value (Cube Root Scale)"
     if hybrid_x:
-        return "Motion Threshold Value (Hybrid Scale)"
+        return "Motion Threshold Value (Hybrid)"
     if log_x:
         return "Motion Threshold Value, Log scale"
     return "Motion Threshold Value (Linear Scale)"
