@@ -821,7 +821,7 @@ def generate_plots_and_reports(validities: list, results: dict, worst_case_resul
                                 aspect_1_1: bool = False,
                                 no_title: bool = False,
                                 log_x: bool = False,
-                                log_y: bool = False) -> Path:
+                                log_y: bool = False, **kwargs) -> Path:
     """
     Test 1 pipeline:
       1. Compute per-validity averages from raw run dicts.
@@ -889,7 +889,7 @@ def generate_comparative_plots(local_csv: Path, remote_csv: Path,
                                aspect_1_1: bool = False,
                                no_title: bool = False,
                                log_x: bool = False,
-                               log_y: bool = False):
+                               log_y: bool = False, **kwargs):
     """
     Generate two separate comparison plots for Test 1 by reading directly from
     two pre-existing validity_vs_latency.csv files (local and remote):
@@ -1471,7 +1471,7 @@ def generate_test2_plots_and_reports(thresholds: list, results: dict, worst_case
                                      aspect_1_1: bool = False,
                                      no_title: bool = False,
                                      log_x: bool = False,
-                                     log_y: bool = False) -> Path:
+                                     log_y: bool = False, **kwargs) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     summary_rows = []
