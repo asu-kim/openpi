@@ -67,9 +67,9 @@ EXPORT_PADDING_INCHES = 0.03
 # Change these constants at source to customize the exact text displayed on graphs.
 # Nothing will be automatically added before or after Y_AXIS_LABEL_AVG and Y_AXIS_LABEL_WC!
 # ==============================================================================
-LATENCY_DISPLAY_NAME = "Monitor-Actuator Latency"  # Used in plot titles and console logs
-Y_AXIS_LABEL_AVG = "Monitor-Actuator Avg. Latency (ms)"  # EXACT text for average latency y-axis
-Y_AXIS_LABEL_WC = "Monitor-Actuator Worst-Case Latency (ms)"  # EXACT text for worst-case latency y-axis
+LATENCY_DISPLAY_NAME = "Latency"  # Used in plot titles and console logs
+Y_AXIS_LABEL_AVG = "Average Latency (ms)"  # EXACT text for average latency y-axis
+Y_AXIS_LABEL_WC = "Worst-Case Latency (ms)"  # EXACT text for worst-case latency y-axis
 
 
 def extract_latency_summary(content: str):
@@ -1760,7 +1760,7 @@ def _render_single_test3_heatmap(validities: list, thresholds: list,
             )
 
     colorbar = fig.colorbar(image, ax=ax, fraction=0.046, pad=0.04)
-    display_name = Y_AXIS_LABEL_WC if is_wc else f"Average {LATENCY_DISPLAY_NAME} (ms)"
+    display_name = Y_AXIS_LABEL_WC if is_wc else Y_AXIS_LABEL_AVG
     colorbar.set_label(
         display_name,
         fontsize=HEATMAP_COLORBAR_LABEL_FONT_SIZE,
