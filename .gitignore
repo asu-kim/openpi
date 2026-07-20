@@ -177,6 +177,8 @@ interpreted_tokens/
 # For MacOS
 .DS_Store
 
-# latency reports
+# reports
 latency_reports/
+test_reports/
+
 
