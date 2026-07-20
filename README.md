@@ -308,119 +308,26 @@ JAX and PyTorch implementations handle precision as follows:
 With torch.compile, inference speed is comparable between JAX and PyTorch.
 
 
+## Secure Monitor & Actuator Architecture
+
+For high-precision runtime safety and cryptographic command mediation when operating bimanual ALOHA robots or simulations, OpenPI implements a **Secure Action Monitor & Gateway System** integrated with IoTAuth session-key authentication:
+
+- **[Secure Architecture Design & Joint Motion Analysis (`secure_architecture_design.md`)](secure_architecture_design.md)**: Theoretical foundation, Joint Motion Analysis (`SIGA`/`INSIGA` classification via `intra_score` and `inter_score`), integration with OpenPI and ALOHA simulation, edge-triggered IoTAuth key lifecycle, and dual-channel (`port 21100`/`21102`) global sequence security model.
+- **[Continuous Kinematic Gatekeeper (`openpi_monitor.py`) Guide](token_monitor_README.md)**: Technical guide covering real-time intra/inter peak-to-peak scoring across the 14 ALOHA joints, dual-socket transport, fail-closed compatibility fallback, and full CLI/environment variable references.
+- **[Token & Continuous Trajectory Interpreter (`interpret_fast_tokens.py`) Guide](interpreter_output_README.md)**: Guide covering offline analysis of log files (`pi0_fast_tokens*.jsonl`), Shannon entropy token proxies, decoded continuous 14D ALOHA joint movement flags, and granular per-timestep kinematic breakdowns.
+- **[IoTAuth Credential & Example Scripts](https://github.com/iotauth/iotauth/blob/main/examples/README.md)**: Official external reference and example scripts for generating entity credentials, starting local/remote Auth servers (`SST`), and testing cryptographic session key handshakes.
+
+---
+
 ## Automated Latency Testing
 
-The `scripts/run_tests.sh` script is the central entry point for running automated performance tests against the ALOHA simulation. It orchestrates the full pipeline: setting up auth, running Docker simulation loops, collecting token logs, and producing a final report and graph — all stored in a structured, timestamped output directory.
+The `scripts/run_tests.sh` script is the central entry point for running automated performance tests (`Test 1`, `Test 2`, and `Test 3`) against the ALOHA simulation, orchestrating Docker loops, token timestamp collection, log analysis (`analyze_latency.py`), and visualization (`plot_results.py`).
 
-### Prerequisites
+Comprehensive instructions on prerequisites, test regimes, usage flags, output structure, and plotting options are maintained directly in the scripts documentation. Please refer to:
 
-The following are always required regardless of auth mode:
-
-- Docker and Docker Compose installed and running
-- `examples/aloha_sim/compose.yml` present and configured
-- Python virtual environment at `.venv/` with `matplotlib` installed (used for graph generation)
-- The sibling `iotauth/` repository cloned next to this repo (`../iotauth/`)
-
-#### `--local` mode (additional requirements)
-
-In local mode the script **generates** all certificates and keys itself via the IoTAuth tooling — no pre-existing `.pem` files are needed. You do need:
-
-- IoTAuth Auth101 server JAR built:
-  ```
-  iotauth/auth/auth-server/target/auth-server-jar-with-dependencies.jar
-  ```
-- IoTAuth example scripts present and executable:
-  ```
-  iotauth/examples/cleanAll.sh
-  iotauth/examples/generateAll.sh
-  iotauth/examples/configs/context_based_validity.graph
-  ```
-- Auth101 properties file:
-  ```
-  iotauth/auth/auth-server/../properties/exampleAuth101.properties
-  ```
-- Port `21900` free on the local machine (the script will kill any existing process on that port)
-
-The script will automatically generate and copy the required `.pem` and `.config` files into `sst_config_creds/local_auth/testing/validity/val{1,3,5,7}/` on each run.
-
-#### `--remote` mode (additional requirements)
-
-In remote mode the script skips all certificate generation and Auth101 server startup, so the following must already be in place **before** running:
-
-- A running Auth101 server reachable on port `21900` (remotely)
-- Per-validity config files for each validity period (`1`, `3`, `5`, `7` seconds) at one of these paths:
-  ```
-  sst_config_creds/remote_auth/testing/validity/val<N>/client_val_<N>.config
-  # or fallback:
-  sst_config_creds/remote_auth/validity/val<N>/client_val_<N>.config
-  ```
-- Any `.pem` certificate files referenced inside those config files must also be present at the paths they specify
-
-### Usage
-
-```bash
-# Run Test 1 with local Auth101 server (default password, 5 runs per validity period)
-./scripts/run_tests.sh --test1 --local
-
-# Run Test 2 once per motion threshold, including end-to-end actuator latency
-./scripts/run_tests.sh --test2 --local --runs 1 --secure-actuator \
-  --show-siga-rate --show-insiga-rate --equidistant-x
-
-# Run the Test 3 validity/threshold heatmap with remote Auth101
-./scripts/run_tests.sh --test3 --remote --runs 3 --secure-actuator
-```
-
-#### Flags
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--test1` | *(one test required)* | Monitor latency vs. session-key validity |
-| `--test2` | *(one test required)* | Monitor latency and SIGA/INSIGA rate vs. motion threshold |
-| `--test3` | *(one test required)* | Monitor latency over the 5x5 validity/threshold grid |
-| `--local` | *(required)* | Use a locally started Auth101 server |
-| `--remote` | *(required)* | Use a remotely running Auth101 server (skips local setup steps) |
-| `--password <pw>` | `1234` | Auth server password |
-| `--runs <n>` | `5` | Number of simulation runs per condition |
-| `--secure-actuator` | off | Measure end-to-end monitor-to-actuator latency |
-| `--show-siga-rate` | off | Add the SIGA-rate overlay to Test 2 graphs |
-| `--show-insiga-rate` | off | Add the INSIGA-rate overlay to Test 2 graphs |
-| `--equidistant-x` | off | Space Test 2 thresholds categorically |
-
-The Test 2 and Test 3 threshold grid is
-`0.0000, 0.0080, 0.0200, 0.1500, 0.6000`. Motion is classified as SIGA when
-`score >= threshold`; consequently, the `0.0000` condition produces a 100% SIGA rate.
-
-### Output Structure
-
-Each invocation creates a new timestamped folder so runs never overwrite each other:
-
-```
-test_reports/
-└── test1/
-    ├── local/
-    │   └── 2026-07-06-10-38-00/        ← one folder per run
-    │       ├── auth101.log              ← Auth server log (local mode only)
-    │       ├── val_1s_run_1.txt         ← per-run latency report
-    │       ├── val_1s_run_2.txt
-    │       ├── ...
-    │       ├── pi0_fast_tokens_<timestamp>.jsonl   ← copied source token log
-    │       ├── validity_vs_latency_same_device.csv ← aggregated summary table
-    │       ├── validity_vs_latency_report.txt
-    │       ├── test1_local_validity_vs_monitor_latency.png  ← graph
-    │       └── test1_local_validity_vs_monitor_latency.pdf
-    └── remote/
-        └── 2026-07-06-11-00-00/
-            └── ...
-```
-
-### Generated Graph
-
-The final graph (`test1_<local|remote>_validity_vs_monitor_latency.png`) plots two data series against the same X-axis (validity period in seconds):
-
-- **Left Y-axis** (blue): Average monitor latency across runs, with ±1 standard deviation error bars and individual run scatter points
-- **Right Y-axis** (red, dashed): Average of the worst-case monitor latency per run
-
-This dual-axis view makes it easy to compare typical vs. worst-case behaviour as the session key validity period changes.
+- **[Automated Test Runner & Usage (`run_tests.sh`)](scripts/README.md#2-automated-test-runner-run_testssh)**
+- **[Prerequisites & Directory Setup](scripts/README.md#prerequisites--directory-setup)**
+- **[Aggregation & Plotting Engine (`plot_results.py`)](scripts/README.md#4-aggregation--plotting-engine-plot_resultspy)**
 
 ## Troubleshooting
 
