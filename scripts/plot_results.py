@@ -178,6 +178,9 @@ def discover_compare_csv(reports_dir: Path, test_name: str,
     if test_name == "test2":
         comparison_root = test_reports_root / "test2" / other_mode / bypass_mode
         csv_name = TEST2_CSV_NAME
+    elif test_name == "test3":
+        comparison_root = test_reports_root / "test3" / other_mode
+        csv_name = TEST3_CSV_NAME
     else:
         comparison_root = test_reports_root / "test1" / other_mode
         csv_name = TEST1_CSV_NAME
@@ -1758,14 +1761,16 @@ def read_test3_csv(csv_path: Path) -> tuple[list, list, dict, dict, dict]:
 
 def _render_single_test3_heatmap(validities: list, thresholds: list,
                                  averages: dict, output_dir: Path, auth_mode: str,
-                                 is_wc: bool = False, no_title: bool = False) -> None:
+                                 is_wc: bool = False, no_title: bool = False,
+                                 vmin: float | None = None, vmax: float | None = None) -> None:
     matrix = [
         [averages[(validity, threshold)] for validity in validities]
         for threshold in thresholds
     ]
 
     fig, ax = plt.subplots(figsize=HEATMAP_FIGURE_SIZE, dpi=FIGURE_DPI)
-    image = ax.imshow(matrix, cmap="RdYlGn_r", aspect="equal", origin="lower")
+    image = ax.imshow(matrix, cmap="RdYlGn_r", aspect="equal", origin="lower",
+                      vmin=vmin, vmax=vmax)
     ax.set_xticks(range(len(validities)))
     ax.set_xticklabels(
         [f"{validity:g}s" for validity in validities],
@@ -1821,25 +1826,79 @@ def _render_single_test3_heatmap(validities: list, thresholds: list,
 
 
 def plot_test3_heatmap(csv_path: Path, output_dir: Path, auth_mode: str,
+                       compare_csv: Path | None = None,
                        no_title: bool = False) -> None:
     if not MATPLOTLIB_AVAILABLE:
         print("\n⚠️  Warning: matplotlib is not available — heatmap skipped.")
         return
 
     validities, thresholds, _, averages, wc_averages = read_test3_csv(csv_path)
+
+    cmp_averages = None
+    cmp_wc_averages = None
+    other_mode = "remote" if auth_mode == "local" else "local"
+    if compare_csv and compare_csv.exists():
+        try:
+            _, _, _, cmp_averages, cmp_wc_averages = read_test3_csv(compare_csv)
+            if set(cmp_averages.keys()) != set(averages.keys()):
+                print(f"⚠️  Warning: Comparison CSV grid keys do not match {csv_path.name}. Using single-mode temperature scale.")
+                cmp_averages = None
+                cmp_wc_averages = None
+            else:
+                print(f"🌡️  Sharing temperature scale across {auth_mode} and {other_mode} heatmaps...")
+        except Exception as error:
+            print(f"⚠️  Warning: Could not read comparison CSV ({compare_csv}): {error}")
+            cmp_averages = None
+            cmp_wc_averages = None
+
+    avg_vmin = min(list(averages.values()) + (list(cmp_averages.values()) if cmp_averages else []))
+    avg_vmax = max(list(averages.values()) + (list(cmp_averages.values()) if cmp_averages else []))
+
     _render_single_test3_heatmap(
         validities, thresholds, averages, output_dir, auth_mode,
-        is_wc=False, no_title=no_title
+        is_wc=False, no_title=no_title, vmin=avg_vmin, vmax=avg_vmax
     )
+    if cmp_averages:
+        _render_single_test3_heatmap(
+            validities, thresholds, cmp_averages, output_dir, other_mode,
+            is_wc=False, no_title=no_title, vmin=avg_vmin, vmax=avg_vmax
+        )
+        if compare_csv.parent != output_dir and compare_csv.parent.exists():
+            _render_single_test3_heatmap(
+                validities, thresholds, cmp_averages, compare_csv.parent, other_mode,
+                is_wc=False, no_title=no_title, vmin=avg_vmin, vmax=avg_vmax
+            )
+            _render_single_test3_heatmap(
+                validities, thresholds, averages, compare_csv.parent, auth_mode,
+                is_wc=False, no_title=no_title, vmin=avg_vmin, vmax=avg_vmax
+            )
+
     if wc_averages is not None and len(wc_averages) == len(averages):
+        wc_vmin = min(list(wc_averages.values()) + (list(cmp_wc_averages.values()) if cmp_wc_averages else []))
+        wc_vmax = max(list(wc_averages.values()) + (list(cmp_wc_averages.values()) if cmp_wc_averages else []))
         _render_single_test3_heatmap(
             validities, thresholds, wc_averages, output_dir, auth_mode,
-            is_wc=True, no_title=no_title
+            is_wc=True, no_title=no_title, vmin=wc_vmin, vmax=wc_vmax
         )
+        if cmp_wc_averages and len(cmp_wc_averages) == len(cmp_averages):
+            _render_single_test3_heatmap(
+                validities, thresholds, cmp_wc_averages, output_dir, other_mode,
+                is_wc=True, no_title=no_title, vmin=wc_vmin, vmax=wc_vmax
+            )
+            if compare_csv.parent != output_dir and compare_csv.parent.exists():
+                _render_single_test3_heatmap(
+                    validities, thresholds, cmp_wc_averages, compare_csv.parent, other_mode,
+                    is_wc=True, no_title=no_title, vmin=wc_vmin, vmax=wc_vmax
+                )
+                _render_single_test3_heatmap(
+                    validities, thresholds, wc_averages, compare_csv.parent, auth_mode,
+                    is_wc=True, no_title=no_title, vmin=wc_vmin, vmax=wc_vmax
+                )
 
 
 def generate_test3_outputs(validities: list, thresholds: list, run_count: int,
                            results: dict, wc_results: dict, output_dir: Path, auth_mode: str,
+                           compare_csv: Path | None = None,
                            no_title: bool = False) -> Path:
     averages = {
         key: sum(run_latencies) / len(run_latencies)
@@ -1872,7 +1931,7 @@ def generate_test3_outputs(validities: list, thresholds: list, run_count: int,
     csv_path = write_test3_csv(
         validities, thresholds, run_count, averages, wc_averages, output_dir
     )
-    plot_test3_heatmap(csv_path, output_dir, auth_mode, no_title=no_title)
+    plot_test3_heatmap(csv_path, output_dir, auth_mode, compare_csv=compare_csv, no_title=no_title)
     return csv_path
 
 
@@ -2029,22 +2088,17 @@ def main():
         show_active=args.show_active_rate, show_still=args.show_still_rate
     )
 
-    if is_test3:
-        if args.compare_csv:
-            parser.error("--compare-csv is not supported for Test 3 heatmaps")
-        compare_csv = None
-    else:
-        compare_csv = Path(args.compare_csv).resolve() if args.compare_csv else (
-            None if args.no_auto_compare else discover_compare_csv(
-                reports_dir, test_name, auth_mode, args.bypass_mode
-            )
+    compare_csv = Path(args.compare_csv).resolve() if args.compare_csv else (
+        None if args.no_auto_compare else discover_compare_csv(
+            reports_dir, test_name, auth_mode, args.bypass_mode
         )
-        if compare_csv and not args.compare_csv:
-            print(f"🔍 Auto-discovered comparison CSV: {compare_csv}")
-        elif not compare_csv and not args.compare_csv:
-            other_mode = "remote" if auth_mode == "local" else "local"
-            print(f"ℹ️  No completed {other_mode} comparison run was found; "
-                  "only single-mode graphs will be generated.")
+    )
+    if compare_csv and not args.compare_csv:
+        print(f"🔍 Auto-discovered comparison CSV: {compare_csv}")
+    elif not compare_csv and not args.compare_csv:
+        other_mode = "remote" if auth_mode == "local" else "local"
+        print(f"ℹ️  No completed {other_mode} comparison run was found; "
+              "only single-mode graphs will be generated.")
 
     if is_test3:
         primary_csv = find_existing_summary_csv(
@@ -2062,6 +2116,7 @@ def main():
                 try:
                     plot_test3_heatmap(
                         primary_csv, output_dir, auth_mode,
+                        compare_csv=compare_csv,
                         no_title=args.no_title,
                     )
                 except ValueError as error:
@@ -2084,6 +2139,7 @@ def main():
             print("=" * 80)
             generate_test3_outputs(
                 validities, thresholds, runs, results, wc_results, output_dir, auth_mode,
+                compare_csv=compare_csv,
                 no_title=args.no_title,
             )
     elif is_test2:
