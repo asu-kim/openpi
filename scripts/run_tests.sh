@@ -530,8 +530,11 @@ metadata_is_compatible() {
         "Episodes"
         "IoTAuth context"
     )
-    if [ "$TEST_NAME" = "test2" ]; then
+    if [ "$TEST_NAME" = "test2" ] || [ "$TEST_NAME" = "test3" ]; then
         keys+=("Thresholds")
+    fi
+    if [ "$TEST_NAME" = "test3" ]; then
+        keys+=("Validity periods")
     fi
     for key in "${keys[@]}"; do
         current_value="$(sed -n "s/^${key}: //p" "$OUTPUT_DIR/test_metadata.txt" | head -n 1)"
@@ -816,11 +819,45 @@ elif [ "$TEST_NAME" = "test2" ]; then
         python3 scripts/plot_results.py --reports-dir "$OUTPUT_DIR" --bypass-mode "$BYPASS_MODE" --no-auto-compare "${PLOT_ARGS[@]}"
     fi
 elif [ "$TEST_NAME" = "test3" ]; then
-    echo "🌡️  Aggregating the 5x5 Test 3 grid and generating the monitor-latency heatmap..."
-    python3 scripts/plot_results.py \
-        --reports-dir "$OUTPUT_DIR" \
-        --test-name test3 \
-        "${PLOT_ARGS[@]}"
+    TEST3_BASE="$OPENPI_DIR/test_reports/test3"
+
+    if [ "$AUTH_MODE" = "local" ]; then
+        OTHER_MODE="remote"
+    else
+        OTHER_MODE="local"
+    fi
+
+    OTHER_BASE="$TEST3_BASE/$OTHER_MODE"
+    OTHER_CSV=""
+    if [ -d "$OTHER_BASE" ]; then
+        for dir in $(ls -dt "$OTHER_BASE"/*/ 2>/dev/null); do
+            dir="${dir%/}"
+            if [ -f "$dir/validity_threshold_latency.csv" ] \
+                && [ -f "$dir/test_metadata.txt" ] \
+                && metadata_is_compatible "$dir/test_metadata.txt"; then
+                OTHER_CSV="$dir/validity_threshold_latency.csv"
+                break
+            fi
+        done
+    fi
+
+    if [ -n "$OTHER_CSV" ]; then
+        echo "🌡️  Both local and remote Test 3 data found."
+        echo "   Primary ($AUTH_MODE): $OUTPUT_DIR"
+        echo "   Compare ($OTHER_MODE): $OTHER_CSV"
+        echo "   → Generating monitor-latency heatmaps with shared temperature scale..."
+        python3 scripts/plot_results.py \
+            --reports-dir "$OUTPUT_DIR" \
+            --test-name test3 \
+            --compare-csv "$OTHER_CSV" \
+            "${PLOT_ARGS[@]}"
+    else
+        echo "🌡️  Aggregating the 5x5 Test 3 grid and generating the monitor-latency heatmap..."
+        python3 scripts/plot_results.py \
+            --reports-dir "$OUTPUT_DIR" \
+            --test-name test3 \
+            "${PLOT_ARGS[@]}"
+    fi
 else
     python3 scripts/plot_results.py --reports-dir "$OUTPUT_DIR" --bypass-mode "$BYPASS_MODE" "${PLOT_ARGS[@]}"
 fi
