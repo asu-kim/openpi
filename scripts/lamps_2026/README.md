@@ -97,7 +97,7 @@ The runner combines shell orchestration, the Docker-based ALOHA runtime, action 
 | Component | How `run_tests.sh` reaches it | Responsibility | Dedicated guide |
 | --- | --- | --- | --- |
 | [`examples/aloha_sim/compose.yml`](../../examples/aloha_sim/compose.yml) | Invoked directly with `docker compose` | Builds and launches the simulation and the default secure-actuator service | [ALOHA simulation README](../../examples/aloha_sim/README.md) |
-| [`run_with_auth_delay.sh`](run_with_auth_delay.sh) | Used as the simulation image command | Applies optional Auth101 network-delay emulation and starts the ALOHA client | This README |
+| [`run_with_auth_delay.sh`](run_with_auth_delay.sh) | Runs inside Docker as the simulation image command | Uses Linux `tc`/`netem` to apply optional Auth101 network-delay emulation, then starts the ALOHA client | This README |
 | [`examples/aloha_sim/main.py`](../../examples/aloha_sim/main.py) | Started inside the simulation container | Creates the policy client and installs the monitor wrapper when `MONITOR_CONFIG` is set | [ALOHA simulation README](../../examples/aloha_sim/README.md) |
 | [`openpi_monitor.py`](openpi_monitor.py) | Imported by the ALOHA runtime | Classifies action chunks, manages IoTAuth authorization, and routes SIGA or INSIGA actions | [OpenPI monitor guide](../../openpi_monitor_README.md) |
 | [`secure_actuator_client.py`](secure_actuator_client.py) | Created by the monitor unless the actuator is disabled | Sends authorized SIGA chunks over the IoTAuth secure channel | [Secure architecture design](../../secure_architecture_design.md) |
@@ -153,8 +153,11 @@ Compatibility is checked using the run count, latency mode, classification bound
 
 ### `run_with_auth_delay.sh`
 
-[`run_with_auth_delay.sh`](run_with_auth_delay.sh) is the command configured by the ALOHA simulation image.
-It reads `AUTH_NETWORK_DELAY_MS`, resolves the Auth101 destination from `MONITOR_CONFIG`, applies network shaping only to that traffic, and then starts the simulation client.
+[`run_with_auth_delay.sh`](run_with_auth_delay.sh) runs inside the Docker simulation container as the image entrypoint.
+It uses Linux traffic control (`tc`) with `netem` to implement the requested authentication delay.
+The script reads `AUTH_NETWORK_DELAY_MS`, resolves the Auth101 destination from `MONITOR_CONFIG`, and applies network shaping only to traffic for that host and port.
+It then starts the ALOHA simulation client and removes the traffic-control rule when the container exits.
+When the requested delay is zero, it starts the simulation client without installing a traffic-control rule.
 
 The runner exposes this behavior through `--auth-delay-ms`.
 Delay emulation is accepted only in remote mode.
