@@ -90,6 +90,57 @@ Remote mode preserves local credentials and expects the remote Auth101 service a
 By default, the reported latency metric is `monitor_actuator_ms`.
 With `--no-secure-actuator`, the reported latency metric is `monitor_latency`.
 
+### Environment variable overrides
+
+Set the following variables in the host shell before invoking `run_tests.sh`.
+`run_tests.sh` preserves supported host overrides, while Docker Compose supplies defaults for container-only settings and forwards the resulting values into the appropriate simulation container.
+
+| Environment variable | Default | Effect |
+| --- | --- | --- |
+| `ALOHA_MAX_EPISODE_STEPS` | `300` | Sets the maximum number of simulation steps in each episode |
+| `ALOHA_NUM_EPISODES` | `1` | Sets the number of back-to-back episodes in each simulation run |
+| `FORCE_IOTAUTH_REQUEST` | Unset | When truthy, bypasses the cached key and requests a new session key for every SIGA record |
+| `ALWAYS_IOTAUTH_REQUEST` | Unset | When truthy, requires a session-key request for every record regardless of its SIGA or INSIGA label |
+| `IOTAUTH_CONTEXT_PEOPLE` | `1` | Sets the `Number of People` context value sent to Auth101 |
+| `IOTAUTH_CONTEXT_LOCATION` | `Meeting Room` | Sets the `Location` context value sent to Auth101 |
+| `IOTAUTH_CONTEXT_TIME` | `14:00` | Sets the deterministic `Time of Day` context value sent to Auth101 |
+| `SECURE_ACTION_MAX_AGE_MS` | `300000` | Rejects actuator messages older than this maximum age in milliseconds |
+| `ACTUATOR_RECORD_WAIT_TIMEOUT` | `10.0` | Sets how many seconds the actuator waits for an expected action record before failing closed |
+| `SECURE_ACTUATOR_CONTROL_TIMEOUT` | `300.0` | Sets the runtime-to-actuator control timeout in seconds |
+| `SECURE_ACTUATOR_TIMEOUT` | `5.0` | Sets the SIGA and INSIGA connection and delivery timeout in seconds |
+| `SECURE_ACTUATOR_HOST` | `127.0.0.1` | Sets the runtime destination for the encrypted SIGA channel |
+| `SECURE_ACTUATOR_PORT` | `21100` | Sets the shared SIGA client and gateway port |
+| `INSIGA_ACTUATOR_HOST` | `127.0.0.1` | Sets the runtime destination for the plaintext INSIGA channel |
+| `INSIGA_ACTUATOR_PORT` | `21102` | Sets the shared INSIGA client and gateway port |
+| `SECURE_ACTUATOR_CONTROL_HOST` | `127.0.0.1` | Sets the runtime destination for actuator-control requests |
+| `SECURE_ACTUATOR_CONTROL_PORT` | `21101` | Sets the shared actuator-control client and gateway port |
+
+For example:
+
+```bash
+ALOHA_MAX_EPISODE_STEPS=600 \
+ALOHA_NUM_EPISODES=3 \
+IOTAUTH_CONTEXT_LOCATION="Meeting Room" \
+./scripts/lamps_2026/run_tests.sh --test1 --remote --runs 5
+```
+
+The runner manages the following variables for each test condition:
+
+| Runner-managed variable | Use instead |
+| --- | --- |
+| `MONITOR_CONFIG` | Select `--local` or `--remote` and install the matching credentials |
+| `OPENPI_MOTION_THRESHOLD` | Select the test regime or edit the Test 2 and Test 3 threshold arrays in `run_tests.sh` |
+| `TEST_VALIDITY_PERIOD`, `TEST_RUN_ITERATION`, `TEST_TOTAL_RUNS` | Select a test regime and set `--runs` |
+| `AUTH_NETWORK_DELAY_MS` | Pass `--auth-delay-ms` |
+| `SECURE_ACTUATOR_ENABLED`, `ACTUATOR_CONFIG`, `ACTUATOR_LATENCY_LOG` | Use the default secure actuator or pass `--no-secure-actuator` |
+
+Do not set runner-managed variables directly because `run_tests.sh` replaces or clears them during the parameter sweep.
+
+The OpenPI server also reads `SERVER_ARGS`, `OPENPI_DATA_HOME`, and `OPENPI_FAST_TOKEN_LOG` through [`examples/aloha_sim/compose.yml`](../../examples/aloha_sim/compose.yml).
+These configure the served policy, asset cache, and token-log destination rather than the test sweep itself.
+Keep `OPENPI_FAST_TOKEN_LOG` under `/app/data/aloha_sim/token_logs/` so that `run_tests.sh` can discover and archive each new log.
+See the [ALOHA simulation environment setup](../../examples/aloha_sim/README.md) and its [`.env.example`](../../examples/aloha_sim/.env.example) for those server settings.
+
 ## What the runner uses
 
 The runner combines shell orchestration, the Docker-based ALOHA runtime, action monitoring, actuator isolation, report analysis, and plotting.
