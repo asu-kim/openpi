@@ -169,3 +169,16 @@ cython_debug/
 
 # Interpreted tokens
 interpreted_tokens/
+
+## SST security certificates and configs
+*.config
+*.pem
+
+# For MacOS
+.DS_Store
+
+# reports
+latency_reports/
+test_reports/
+
+

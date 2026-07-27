@@ -15,6 +15,8 @@ services:
     volumes:
       - $PWD:/app
       - ../../data:/data
+      - ../../../iotauth:/iotauth
+      - /etc/localtime:/etc/localtime:ro
     environment:
       # Episode length (overrides the gym 300-step default); ~records per episode =
       # value / action_horizon(10). Set in examples/aloha_sim/.env or export it.
@@ -22,6 +24,66 @@ services:
       # Number of back-to-back episodes (fresh seed each). Total records ~= per-episode
       # records x this. Preferred over a single over-long episode.
       - ALOHA_NUM_EPISODES=${ALOHA_NUM_EPISODES:-}
+      # Monitor config to automatically load ActionMonitor in simulation client.
+      - MONITOR_CONFIG=${MONITOR_CONFIG:-}
+      # Set to 1 to bypass the IoTAuth key cache and force a new key request on every motion.
+      - FORCE_IOTAUTH_REQUEST=${FORCE_IOTAUTH_REQUEST:-}
+      # Set to 1 to request session keys on EVERY record regardless of motion threshold or label.
+      - ALWAYS_IOTAUTH_REQUEST=${ALWAYS_IOTAUTH_REQUEST:-}
+      # Dynamically overrides the default joint motion sensitivity threshold (default: 0.01).
+      - OPENPI_MOTION_THRESHOLD=${OPENPI_MOTION_THRESHOLD:-}
+      # Optional isolated actuator service. SIGA uses encrypted port 21100;
+      # INSIGA uses unencrypted loopback port 21102; control uses port 21101.
+      - SECURE_ACTUATOR_ENABLED=${SECURE_ACTUATOR_ENABLED:-}
+      - SECURE_ACTUATOR_HOST=${SECURE_ACTUATOR_HOST:-127.0.0.1}
+      - SECURE_ACTUATOR_PORT=${SECURE_ACTUATOR_PORT:-21100}
+      - SECURE_ACTUATOR_TIMEOUT=${SECURE_ACTUATOR_TIMEOUT:-5.0}
+      - INSIGA_ACTUATOR_HOST=${INSIGA_ACTUATOR_HOST:-127.0.0.1}
+      - INSIGA_ACTUATOR_PORT=${INSIGA_ACTUATOR_PORT:-21102}
+      - SECURE_ACTUATOR_CONTROL_HOST=${SECURE_ACTUATOR_CONTROL_HOST:-127.0.0.1}
+      - SECURE_ACTUATOR_CONTROL_PORT=${SECURE_ACTUATOR_CONTROL_PORT:-21101}
+      - SECURE_ACTUATOR_CONTROL_TIMEOUT=${SECURE_ACTUATOR_CONTROL_TIMEOUT:-300.0}
+      # Metadata for test logging
+      - TEST_VALIDITY_PERIOD=${TEST_VALIDITY_PERIOD:-}
+      - TEST_RUN_ITERATION=${TEST_RUN_ITERATION:-}
+      - TEST_TOTAL_RUNS=${TEST_TOTAL_RUNS:-}
+      # Optional remote-Auth101 RTT emulation. The runtime entrypoint reads the
+      # Auth101 host/port from MONITOR_CONFIG and applies tc only to that flow.
+      - AUTH_NETWORK_DELAY_MS=${AUTH_NETWORK_DELAY_MS:-0}
+      # Optional deterministic context for policy-controlled benchmark runs.
+      # If time is unset, the LAMPS action monitor uses the current wall-clock time.
+      - IOTAUTH_CONTEXT_PEOPLE=${IOTAUTH_CONTEXT_PEOPLE:-1}
+      - IOTAUTH_CONTEXT_LOCATION=${IOTAUTH_CONTEXT_LOCATION:-Classroom}
+      - IOTAUTH_CONTEXT_TIME=${IOTAUTH_CONTEXT_TIME:-}
+
+  secure_actuator:
+    profiles: ["secure-actuator"]
+    image: aloha_sim
+    build:
+      context: ../..
+      dockerfile: examples/aloha_sim/Dockerfile
+    init: true
+    tty: true
+    network_mode: host
+    volumes:
+      - $PWD:/app
+      - ../../../iotauth:/iotauth
+    environment:
+      - SECURE_ACTUATOR_BIND_HOST=${SECURE_ACTUATOR_BIND_HOST:-0.0.0.0}
+      - SECURE_ACTUATOR_PORT=${SECURE_ACTUATOR_PORT:-21100}
+      - SECURE_ACTUATOR_CONTROL_BIND_HOST=${SECURE_ACTUATOR_CONTROL_BIND_HOST:-127.0.0.1}
+      - SECURE_ACTUATOR_CONTROL_PORT=${SECURE_ACTUATOR_CONTROL_PORT:-21101}
+      - SECURE_ACTION_MAX_AGE_MS=${SECURE_ACTION_MAX_AGE_MS:-300000}
+      - ACTUATOR_RECORD_WAIT_TIMEOUT=${ACTUATOR_RECORD_WAIT_TIMEOUT:-10.0}
+      - ACTUATOR_LATENCY_LOG=${ACTUATOR_LATENCY_LOG:-}
+      - INSIGA_ACTUATOR_BIND_HOST=${INSIGA_ACTUATOR_BIND_HOST:-127.0.0.1}
+      - INSIGA_ACTUATOR_PORT=${INSIGA_ACTUATOR_PORT:-21102}
+      - ALOHA_MAX_EPISODE_STEPS=${ALOHA_MAX_EPISODE_STEPS:-}
+    command:
+      - /.venv/bin/python
+      - /app/scripts/lamps_2026/secure_actuator_gateway.py
+      - --config-file
+      - ${ACTUATOR_CONFIG:-/app/sst_config_creds/server.config}
 
   openpi_server:
     image: openpi_server

@@ -203,7 +203,7 @@ def token_motion_proxy(fast_tokens: list[int]) -> dict:
     dom_token, dom_count = counts.most_common(1)[0]
 
     label = ("still" if norm_entropy < STILL_PROXY_T
-             else "active" if norm_entropy > ACTIVE_PROXY_T
+             else "active" if norm_entropy >= ACTIVE_PROXY_T
              else "low")
 
     base.update(
@@ -244,7 +244,7 @@ def joint_motion_analysis(
     T, D = aloha.shape
     per_dim_std = aloha.std(axis=0)
     per_dim_ptp = aloha.max(axis=0) - aloha.min(axis=0)
-    moving_mask = per_dim_ptp > move_threshold
+    moving_mask = per_dim_ptp >= move_threshold
 
     joints = [
         {
@@ -264,7 +264,7 @@ def joint_motion_analysis(
         step_deltas = np.linalg.norm(np.diff(aloha, axis=0), axis=1)
     else:
         step_deltas = np.zeros(0)
-    timestep_moving = step_deltas > move_threshold
+    timestep_moving = step_deltas >= move_threshold
 
     # Distance from the current pose, if state is available.
     dist_from_state = None
@@ -320,7 +320,7 @@ def per_timestep_rows(aloha: np.ndarray, move_threshold: float,
         else:
             diff = np.abs(aloha[t] - aloha[t - 1])
             row["step_delta"] = float(np.linalg.norm(aloha[t] - aloha[t - 1]))
-            changed = [joint_name(d) for d in range(D) if diff[d] > move_threshold]
+            changed = [joint_name(d) for d in range(D) if diff[d] >= move_threshold]
         row["num_relevant_joints"] = len(changed)
         row["relevant_joints"] = "|".join(changed)
         if state is not None and state.shape[-1] >= D:
@@ -739,7 +739,7 @@ def print_token_motion(processed: list[dict], n_print: int) -> None:
     print("ANALYSIS 1: TOKEN-ONLY MOTION PROXY (decode-free)")
     print("=" * 70)
     print("Proxy = normalized token entropy in [0,1]. Higher -> more diverse tokens")
-    print(f"-> more likely motion.  still < {STILL_PROXY_T}  <= low <= {ACTIVE_PROXY_T} < active")
+    print(f"-> more likely motion.  still < {STILL_PROXY_T}  <= low < {ACTIVE_PROXY_T} <= active")
     print("NOTE: whole-chunk estimate only; NOT per-joint, NOT exact.\n")
 
     shown = min(n_print, len(processed)) if n_print > 0 else 0
