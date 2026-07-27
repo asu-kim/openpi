@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import numpy as np
 from openpi_client.secure_action_protocol import decode_action_chunk
 
-from secure_actuator_client import SecureActuatorClient
+from scripts.lamps_2026.secure_actuator_client import SecureActuatorClient
 
 
 class FakeChannel:

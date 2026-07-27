@@ -10,7 +10,7 @@ import numpy as np
 import datetime
 
 
-OPENPI_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "."))
+OPENPI_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 if OPENPI_DIR not in sys.path:
     sys.path.append(OPENPI_DIR)
 OPENPI_CLIENT_DIR = os.path.join(OPENPI_DIR, "packages/openpi-client/src")
@@ -84,7 +84,7 @@ class ActionMonitor:
         self.execution_horizon = execution_horizon
         self.ctx = None
         
-        IOTAUTH_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../iotauth/entity/python"))
+        IOTAUTH_DIR = os.path.abspath(os.path.join(OPENPI_DIR, "../iotauth/entity/python"))
         if IOTAUTH_DIR not in sys.path:
             sys.path.append(IOTAUTH_DIR)
             
@@ -148,8 +148,8 @@ class ActionMonitor:
             "on",
         )
         if self.secure_actuator is None and secure_enabled:
-            from insiga_actuator_client import InsigaActuatorClient
-            from secure_actuator_client import SecureActuatorClient
+            from scripts.lamps_2026.insiga_actuator_client import InsigaActuatorClient
+            from scripts.lamps_2026.secure_actuator_client import SecureActuatorClient
 
             secure_host = os.environ.get("SECURE_ACTUATOR_HOST") or None
             secure_port_raw = os.environ.get("SECURE_ACTUATOR_PORT", "").strip()

@@ -85,7 +85,7 @@ pip install numpy cryptography typing_extensions
 To run the full dual-channel secure actuator gateway locally, first start the gateway service using its registered `Servers-group` entity configuration:
 
 ```bash
-python examples/aloha_sim/secure_actuator_gateway.py \
+python scripts/lamps_2026/secure_actuator_gateway.py \
   --config-file /app/sst_config_creds/server.config
 ```
 
@@ -109,13 +109,13 @@ Watches the log directory (`data/aloha_sim/token_logs/`) for new inference files
 
 ```bash
 # Standard run with default threshold (0.01)
-python openpi_monitor.py --config-file /app/sst_config_creds/client.config
+python scripts/lamps_2026/openpi_monitor.py --config-file /app/sst_config_creds/client.config
 
 # Custom sensitivity threshold (0.05) using CLI flag
-python openpi_monitor.py --config-file /app/sst_config_creds/client.config --motion-threshold 0.05
+python scripts/lamps_2026/openpi_monitor.py --config-file /app/sst_config_creds/client.config --motion-threshold 0.05
 
 # Custom sensitivity threshold and forced IoTAuth renewal on every SIGA using env vars
-OPENPI_MOTION_THRESHOLD=0.05 FORCE_IOTAUTH_REQUEST=1 python openpi_monitor.py --config-file /app/sst_config_creds/client.config
+OPENPI_MOTION_THRESHOLD=0.05 FORCE_IOTAUTH_REQUEST=1 python scripts/lamps_2026/openpi_monitor.py --config-file /app/sst_config_creds/client.config
 ```
 
 ### Offline Replay & Verification
@@ -123,7 +123,7 @@ Process an existing static `.jsonl` token log instantly without launching Docker
 
 ```bash
 LATEST_LOG=$(ls -t data/aloha_sim/token_logs/*.jsonl | head -1)
-python openpi_monitor.py --config-file /app/sst_config_creds/client.config --log-file "$LATEST_LOG" --motion-threshold 0.02
+python scripts/lamps_2026/openpi_monitor.py --config-file /app/sst_config_creds/client.config --log-file "$LATEST_LOG" --motion-threshold 0.02
 ```
 
 ---
@@ -171,7 +171,7 @@ Contains exact end-to-end timing between the start of motion classification (`mo
 Correlate and summarize both logs into unified performance reports:
 
 ```bash
-python scripts/analyze_latency.py TOKEN_LOG.jsonl \
+python scripts/lamps_2026/analyze_latency.py TOKEN_LOG.jsonl \
   --actuator-log ACTUATOR_LATENCY_LOG.jsonl
 ```
 

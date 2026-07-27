@@ -184,7 +184,7 @@ If you want to embed a policy server call in your own robot runtime, we have a m
 
 We provide more examples for how to fine-tune and run inference with our models on the ALOHA platform in the following READMEs:
 - [ALOHA Simulator](examples/aloha_sim)
-  - [Recording and Interpreting π₀-FAST Action Tokens](examples/aloha_sim/README.md#recording-and-interpreting-π-fast-action-tokens): run `pi0_fast_base` through ALOHA sim, log the raw generated action tokens to JSONL, and summarize them with `interpret_fast_tokens.py`.
+  - [Recording and Interpreting π₀-FAST Action Tokens](examples/aloha_sim/README.md#recording-and-interpreting-π-fast-action-tokens): run `pi0_fast_base` through ALOHA sim, log the raw generated action tokens to JSONL, and summarize them with `scripts/lamps_2026/interpret_fast_tokens.py`.
 - [ALOHA Real](examples/aloha_real)
 - [UR5](examples/ur5)
 
@@ -313,21 +313,17 @@ With torch.compile, inference speed is comparable between JAX and PyTorch.
 For high-precision runtime safety and cryptographic command mediation when operating bimanual ALOHA robots or simulations, OpenPI implements a **Secure Action Monitor & Gateway System** integrated with IoTAuth session-key authentication:
 
 - **[Secure Architecture Design & Joint Motion Analysis (`secure_architecture_design.md`)](secure_architecture_design.md)**: Theoretical foundation, Joint Motion Analysis (`SIGA`/`INSIGA` classification via `intra_score` and `inter_score`), integration with OpenPI and ALOHA simulation, edge-triggered IoTAuth key lifecycle, and dual-channel (`port 21100`/`21102`) global sequence security model.
-- **[Continuous Kinematic Gatekeeper (`openpi_monitor.py`) Guide](token_monitor_README.md)**: Technical guide covering real-time intra/inter peak-to-peak scoring across the 14 ALOHA joints, dual-socket transport, fail-closed compatibility fallback, and full CLI/environment variable references.
-- **[Token & Continuous Trajectory Interpreter (`interpret_fast_tokens.py`) Guide](interpreter_output_README.md)**: Guide covering offline analysis of log files (`pi0_fast_tokens*.jsonl`), Shannon entropy token proxies, decoded continuous 14D ALOHA joint movement flags, and granular per-timestep kinematic breakdowns.
+- **[Continuous Kinematic Gatekeeper (`scripts/lamps_2026/openpi_monitor.py`) Guide](openpi_monitor_README.md)**: Technical guide covering real-time intra/inter peak-to-peak scoring across the 14 ALOHA joints, dual-socket transport, fail-closed compatibility fallback, and full CLI/environment variable references.
+- **[Token & Continuous Trajectory Interpreter (`scripts/lamps_2026/interpret_fast_tokens.py`) Guide](interpreter_output_README.md)**: Guide covering offline analysis of log files (`pi0_fast_tokens*.jsonl`), Shannon entropy token proxies, decoded continuous 14D ALOHA joint movement flags, and granular per-timestep kinematic breakdowns.
 - **[IoTAuth Credential & Example Scripts](https://github.com/iotauth/iotauth/blob/main/examples/README.md)**: Official external reference and example scripts for generating entity credentials, starting local/remote Auth servers (`SST`), and testing cryptographic session key handshakes.
 
 ---
 
 ## Automated Latency Testing
 
-The `scripts/run_tests.sh` script is the central entry point for running automated performance tests (`Test 1`, `Test 2`, and `Test 3`) against the ALOHA simulation, orchestrating Docker loops, token timestamp collection, log analysis (`analyze_latency.py`), and visualization (`plot_results.py`).
+The `scripts/lamps_2026/run_tests.sh` script is the central entry point for running automated performance tests (`Test 1`, `Test 2`, and `Test 3`) against the ALOHA simulation, orchestrating Docker loops, token timestamp collection, log analysis (`analyze_latency.py`), and visualization (`plot_results.py`).
 
-Comprehensive instructions on prerequisites, test regimes, usage flags, output structure, and plotting options are maintained directly in the scripts documentation. Please refer to:
-
-- **[Automated Test Runner & Usage (`run_tests.sh`)](scripts/README.md#2-automated-test-runner-run_testssh)**
-- **[Prerequisites & Directory Setup](scripts/README.md#prerequisites--directory-setup)**
-- **[Aggregation & Plotting Engine (`plot_results.py`)](scripts/README.md#4-aggregation--plotting-engine-plot_resultspy)**
+Operational instructions, prerequisites, result structure, and plotting commands are maintained in the **[LAMPS 2026 VLA Access-Control Testing Guide](scripts/lamps_2026/README.md)**.
 
 ## Troubleshooting
 

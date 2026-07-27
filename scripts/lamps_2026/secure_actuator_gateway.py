@@ -14,21 +14,17 @@ import sys
 import threading
 import time
 
-import env as _env
 import numpy as np
 from openpi_client import actuator_control_rpc
 from openpi_client import plain_action_transport
 from openpi_client.secure_action_protocol import SecureActionProtocolError
 from openpi_client.secure_action_protocol import decode_action_chunk
 
-IOTAUTH_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../iotauth/entity/python"))
+OPENPI_DIR = Path(__file__).resolve().parents[2]
+ALOHA_SIM_DIR = OPENPI_DIR / "examples/aloha_sim"
+IOTAUTH_DIR = str(OPENPI_DIR.parent / "iotauth/entity/python")
 if IOTAUTH_DIR not in sys.path:
     sys.path.append(IOTAUTH_DIR)
-
-from iotauth import IoTAuthContext  # noqa: E402
-from iotauth import IoTAuthError  # noqa: E402
-from iotauth import SecureChannelClosed  # noqa: E402
-from iotauth import SecureServer  # noqa: E402
 
 
 @dataclass(frozen=True)
@@ -199,6 +195,10 @@ class ActuatorControlServer:
     """Own Gym and expose observation/tick operations to the existing runtime."""
 
     def __init__(self, gateway: SecureActuatorGateway, args: argparse.Namespace) -> None:
+        if str(ALOHA_SIM_DIR) not in sys.path:
+            sys.path.append(str(ALOHA_SIM_DIR))
+        import env as _env  # noqa: PLC0415
+
         self.gateway = gateway
         self.environment = _env.AlohaSimEnvironment(
             task=args.task,
@@ -252,6 +252,10 @@ class ActuatorControlServer:
 
 
 def _serve_secure_channels(ctx, gateway: SecureActuatorGateway, args: argparse.Namespace) -> None:
+    from iotauth import IoTAuthError  # noqa: PLC0415
+    from iotauth import SecureChannelClosed  # noqa: PLC0415
+    from iotauth import SecureServer  # noqa: PLC0415
+
     with SecureServer(ctx, host=args.host, port=args.port, timeout=args.timeout) as server:
         print(f"[SecureActuator] Secure channel listening on {args.host}:{args.port}")
         while True:
@@ -292,6 +296,8 @@ def _serve_insiga_channels(gateway: SecureActuatorGateway, args: argparse.Namesp
 
 
 def serve(args: argparse.Namespace) -> None:
+    from iotauth import IoTAuthContext  # noqa: PLC0415
+
     # Generated JSON configs contain paths relative to their own directory.
     config_file = os.path.abspath(args.config_file)
     original_cwd = os.getcwd()

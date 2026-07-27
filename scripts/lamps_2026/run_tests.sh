@@ -7,7 +7,7 @@ export PATH="$PATH:/usr/local/bin:/opt/homebrew/bin:$HOME/.docker/bin:/Applicati
 
 # Get absolute paths
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-OPENPI_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+OPENPI_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 IOTAUTH_DIR="$(cd "$OPENPI_DIR/../iotauth" && pwd)"
 
 # Automatically activate virtual environment if present
@@ -19,7 +19,7 @@ fi
 # ─────────────────────────────────────────────────────────────────────────────
 # Argument parsing
 # Usage:
-#   ./scripts/run_tests.sh --test1|--test2|--test3 --local|--remote [options]
+#   ./scripts/lamps_2026/run_tests.sh --test1|--test2|--test3 --local|--remote [options]
 # ─────────────────────────────────────────────────────────────────────────────
 TEST_NAME=""
 AUTH_MODE=""
@@ -27,7 +27,7 @@ AUTH_PASSWORD="1234"
 RUNS="5"
 BYPASS_MODE="insiga"
 AUTH_DELAY_MS="0"
-SECURE_ACTUATOR_MODE=0
+SECURE_ACTUATOR_MODE=1
 PLOT_ARGS=()
 TEST2_THRESHOLDS=(0.0000 0.09 0.2 0.25 0.95)
 TEST3_VALIDITY_PERIODS=(1 2 3 4 5)
@@ -41,7 +41,8 @@ Core options:
   --password <pw>           Auth password (default: 1234)
   --runs <n>                Runs per condition (default: 5)
   --auth-delay-ms <ms>      Remote Auth101 round-trip delay emulation
-  --secure-actuator         Measure monitor-to-actuator latency
+  --secure-actuator         Enable secure actuator (default)
+  --no-secure-actuator      Disable secure actuator and measure monitor-only latency
   --bypass-mode <mode>      Result grouping: insiga or siga (default: insiga)
 
 Plot options:
@@ -118,6 +119,10 @@ while [[ "$#" -gt 0 ]]; do
             ;;
         --secure-actuator)
             SECURE_ACTUATOR_MODE=1
+            shift
+            ;;
+        --no-secure-actuator)
+            SECURE_ACTUATOR_MODE=0
             shift
             ;;
         --show-siga-rate|--show-active-rate)
@@ -468,7 +473,7 @@ analyze_run_latency() {
         fi
         analyze_args+=(--actuator-log "$ACTUATOR_LATENCY_LOG_HOST")
     fi
-    python3 scripts/analyze_latency.py "${analyze_args[@]}"
+    python3 scripts/lamps_2026/analyze_latency.py "${analyze_args[@]}"
 }
 
 print_run_latency() {
@@ -772,14 +777,14 @@ if [ "$TEST_NAME" = "test1" ]; then
         echo "   Primary ($AUTH_MODE): $OUTPUT_DIR"
         echo "   Compare ($OTHER_MODE): $OTHER_CSV"
         echo "   → Generating separate comparative plots (avg latency & worst-case)..."
-        python3 scripts/plot_results.py \
+        python3 scripts/lamps_2026/plot_results.py \
             --reports-dir "$OUTPUT_DIR" \
             --compare-csv "$OTHER_CSV" \
             --bypass-mode "$BYPASS_MODE" \
             "${PLOT_ARGS[@]}"
     else
         echo "ℹ️  Only $AUTH_MODE Test 1 data found. Using single-mode (combined) graph."
-        python3 scripts/plot_results.py --reports-dir "$OUTPUT_DIR" --bypass-mode "$BYPASS_MODE" --no-auto-compare "${PLOT_ARGS[@]}"
+        python3 scripts/lamps_2026/plot_results.py --reports-dir "$OUTPUT_DIR" --bypass-mode "$BYPASS_MODE" --no-auto-compare "${PLOT_ARGS[@]}"
     fi
 elif [ "$TEST_NAME" = "test2" ]; then
     TEST2_BASE="$OPENPI_DIR/test_reports/test2"
@@ -809,14 +814,14 @@ elif [ "$TEST_NAME" = "test2" ]; then
         echo "   Primary ($AUTH_MODE): $OUTPUT_DIR"
         echo "   Compare ($OTHER_MODE): $OTHER_CSV"
         echo "   → Generating separate comparative plots (avg latency & worst-case)..."
-        python3 scripts/plot_results.py \
+        python3 scripts/lamps_2026/plot_results.py \
             --reports-dir "$OUTPUT_DIR" \
             --compare-csv "$OTHER_CSV" \
             --bypass-mode "$BYPASS_MODE" \
             "${PLOT_ARGS[@]}"
     else
         echo "ℹ️  Only $AUTH_MODE Test 2 data found. Generating single-mode graphs."
-        python3 scripts/plot_results.py --reports-dir "$OUTPUT_DIR" --bypass-mode "$BYPASS_MODE" --no-auto-compare "${PLOT_ARGS[@]}"
+        python3 scripts/lamps_2026/plot_results.py --reports-dir "$OUTPUT_DIR" --bypass-mode "$BYPASS_MODE" --no-auto-compare "${PLOT_ARGS[@]}"
     fi
 elif [ "$TEST_NAME" = "test3" ]; then
     TEST3_BASE="$OPENPI_DIR/test_reports/test3"
@@ -846,20 +851,20 @@ elif [ "$TEST_NAME" = "test3" ]; then
         echo "   Primary ($AUTH_MODE): $OUTPUT_DIR"
         echo "   Compare ($OTHER_MODE): $OTHER_CSV"
         echo "   → Generating monitor-latency heatmaps with shared temperature scale..."
-        python3 scripts/plot_results.py \
+        python3 scripts/lamps_2026/plot_results.py \
             --reports-dir "$OUTPUT_DIR" \
             --test-name test3 \
             --compare-csv "$OTHER_CSV" \
             "${PLOT_ARGS[@]}"
     else
         echo "🌡️  Aggregating the 5x5 Test 3 grid and generating the monitor-latency heatmap..."
-        python3 scripts/plot_results.py \
+        python3 scripts/lamps_2026/plot_results.py \
             --reports-dir "$OUTPUT_DIR" \
             --test-name test3 \
             "${PLOT_ARGS[@]}"
     fi
 else
-    python3 scripts/plot_results.py --reports-dir "$OUTPUT_DIR" --bypass-mode "$BYPASS_MODE" "${PLOT_ARGS[@]}"
+    python3 scripts/lamps_2026/plot_results.py --reports-dir "$OUTPUT_DIR" --bypass-mode "$BYPASS_MODE" "${PLOT_ARGS[@]}"
 fi
 
 echo ""

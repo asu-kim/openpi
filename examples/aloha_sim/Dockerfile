@@ -40,4 +40,4 @@ RUN uv pip sync /tmp/requirements.txt /tmp/openpi-client/pyproject.toml
 RUN uv pip install cryptography
 ENV PYTHONPATH=/app:/app/src:/app/packages/openpi-client/src
 
-CMD ["/bin/bash", "/app/examples/aloha_sim/run_with_auth_delay.sh"]
+CMD ["/bin/bash", "/app/scripts/lamps_2026/run_with_auth_delay.sh"]

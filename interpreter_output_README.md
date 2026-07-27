@@ -131,7 +131,7 @@ Each row reports exact values for all 14 joints at step $t$, the Euclidean step 
 ## 5. CLI Usage & Flags Reference
 
 ```bash
-python interpret_fast_tokens.py [OPTIONS] [LOG_FILES...]
+python scripts/lamps_2026/interpret_fast_tokens.py [OPTIONS] [LOG_FILES...]
 ```
 
 ### Command-Line Arguments Table
@@ -148,12 +148,12 @@ python interpret_fast_tokens.py [OPTIONS] [LOG_FILES...]
 
 ```bash
 # Analyze all existing token logs with default thresholds
-python interpret_fast_tokens.py data/aloha_sim/token_logs/*.jsonl
+python scripts/lamps_2026/interpret_fast_tokens.py data/aloha_sim/token_logs/*.jsonl
 
 # Watch the newest active simulation log in real time with custom joint threshold
 LATEST=$(ls -t data/aloha_sim/token_logs/*.jsonl | head -1)
-python interpret_fast_tokens.py --watch --joint-move-threshold 0.005 "$LATEST"
+python scripts/lamps_2026/interpret_fast_tokens.py --watch --joint-move-threshold 0.005 "$LATEST"
 
 # Print granular per-timestep joint movements for a specific run
-python interpret_fast_tokens.py --per-timestep data/aloha_sim/token_logs/pi0_fast_tokens_20260719.jsonl
+python scripts/lamps_2026/interpret_fast_tokens.py --per-timestep data/aloha_sim/token_logs/pi0_fast_tokens_20260719.jsonl
 ```

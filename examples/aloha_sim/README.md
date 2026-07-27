@@ -59,7 +59,7 @@ Review interpreted FAST tokens for the latest simulation run.
 ```
 LATEST_LOG=$(ls -t data/aloha_sim/token_logs/*.jsonl | head -1)
 wc -l "$LATEST_LOG"
-uv run python interpret_fast_tokens.py --input "$LATEST_LOG" \
+uv run python scripts/lamps_2026/interpret_fast_tokens.py --input "$LATEST_LOG" \
   --output-dir interpreted_tokens --token-motion --joint-motion --per-timestep \
   --print-records 30 --motion-print 30 --csv
 
@@ -102,7 +102,7 @@ for ALOHA sim and routinely emits FAST sequences that fail to decode (they appea
 > [asu-kim/openpi](https://github.com/asu-kim/openpi), on the
 > [`auth`](https://github.com/asu-kim/openpi/tree/auth) branch — check it out to get the
 > `pi0_fast_aloha_sim` config, the `ExtractFASTActions` token logging, the `compose.yml`
-> env-var forwarding, and `interpret_fast_tokens.py`.
+> env-var forwarding, and `scripts/lamps_2026/interpret_fast_tokens.py`.
 
 ### 1. Run the sim and record tokens
 
@@ -111,16 +111,13 @@ The server reads two variables, forwarded into the `openpi_server` container by
 `OPENPI_FAST_TOKEN_LOG` (where to write the token log; `/app` inside the container is the
 repo root on the host, so it lands in `./data`). Set them one of two ways.
 
-**Option A — `.env` file (persists across logins; recommended).** A ready-made
-[examples/aloha_sim/.env](.env) is provided and Compose auto-loads it (its project
-directory defaults to the compose file's directory). It is gitignored, so if you cloned
-fresh and it's missing, create it with:
+**Option A - `.env` file (persists across logins; recommended).** Copy the tracked
+[examples/aloha_sim/.env.example](.env.example) template to `.env`.
+Compose auto-loads `.env` because its project directory defaults to the compose file's directory.
+The local `.env` file is gitignored.
 
 ```bash
-cat > examples/aloha_sim/.env <<'EOF'
-SERVER_ARGS=policy:checkpoint --policy.config=pi0_fast_aloha_sim --policy.dir=gs://openpi-assets/checkpoints/pi0_fast_base
-OPENPI_FAST_TOKEN_LOG=/app/data/aloha_sim/token_logs/pi0_fast_tokens.jsonl
-EOF
+cp examples/aloha_sim/.env.example examples/aloha_sim/.env
 ```
 
 With the `.env` in place you can skip straight to the `docker compose` command below.
@@ -209,14 +206,14 @@ grep -o '"decoded_all_zero": [a-z]*' "$LATEST_LOG" | sort | uniq -c
 
 ### 3. Produce human-readable summaries
 
-[interpret_fast_tokens.py](../../interpret_fast_tokens.py) reads the JSONL and emits
+[interpret_fast_tokens.py](../../scripts/lamps_2026/interpret_fast_tokens.py) reads the JSONL and emits
 per-record and aggregate summaries plus optional CSV/plots. The commands below reuse the
 `$LATEST_LOG` set in step 2 (re-run that one line in a new shell, or point `--input` at a
 specific timestamped file).
 
 ```bash
 LATEST_LOG=$(ls -t data/aloha_sim/token_logs/*.jsonl | head -1)   # most recent run
-uv run python interpret_fast_tokens.py \
+uv run python scripts/lamps_2026/interpret_fast_tokens.py \
   --input "$LATEST_LOG" \
   --output-dir interpreted_tokens --csv --plots --print-records 5
 ```
@@ -290,7 +287,7 @@ This is coarse and **not per-joint**, but it lets you rank steps by likely activ
 when decoding fails.
 
 ```bash
-uv run python interpret_fast_tokens.py \
+uv run python scripts/lamps_2026/interpret_fast_tokens.py \
   --input "$LATEST_LOG" \
   --token-motion --motion-print 10
 ```
@@ -311,7 +308,7 @@ whether the chunk is static (holds pose), per-timestep step deltas, and — if y
 shows which joints move most often across the run.
 
 ```bash
-uv run python interpret_fast_tokens.py \
+uv run python scripts/lamps_2026/interpret_fast_tokens.py \
   --input "$LATEST_LOG" \
   --joint-motion --joint-move-threshold 0.02 --motion-print 10
 ```
@@ -330,7 +327,7 @@ which joints actually move and by how much." It needs decoded actions in the log
 Analysis 2.
 
 ```bash
-uv run python interpret_fast_tokens.py \
+uv run python scripts/lamps_2026/interpret_fast_tokens.py \
   --input "$LATEST_LOG" \
   --joint-motion --per-timestep --joint-move-threshold 0.01
 ```

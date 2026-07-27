@@ -14,15 +14,15 @@ Test 1 pipeline (single source of truth):
 Can be run independently on any existing test_reports/ run folder:
 
     # Single-mode (generates combined avg+worst-case graph)
-    python scripts/plot_results.py \
+    python scripts/lamps_2026/plot_results.py \
         --reports-dir test_reports/test1/local/2026-07-06-10-38-00
 
     # Comparative (generates separate avg and worst-case graphs, local vs remote)
-    python scripts/plot_results.py \
+    python scripts/lamps_2026/plot_results.py \
         --reports-dir test_reports/test1/local/2026-07-06-10-38-00 \
         --compare-csv test_reports/test1/remote/2026-07-06-11-00-00/validity_vs_latency.csv
 
-    python scripts/plot_results.py \
+    python scripts/lamps_2026/plot_results.py \
         --reports-dir test_reports/test2/local/2026-07-06-11-00-00 \
         --bypass-mode still
 """
@@ -63,6 +63,7 @@ DATA_LABEL_BOUNDARY_PADDING_POINTS = 4
 DATA_LABEL_MIN_GAP_POINTS = 4
 LAYOUT_PADDING = 0.25
 EXPORT_PADDING_INCHES = 0.03
+EQUIDISTANT_X_MARGIN = 0.12
 # ==============================================================================
 # Y-AXIS AND TITLE DISPLAY NAME MACROS
 # Change these constants at source to customize the exact text displayed on graphs.
@@ -122,10 +123,10 @@ try:
 except ImportError:
     MATPLOTLIB_AVAILABLE = False
     ADJUST_TEXT_AVAILABLE = False
+    openpi_dir = Path(__file__).resolve().parents[2]
     known_venvs = [
-        Path(__file__).parent.parent.parent / "iotauth/entity/yolo_entity/.venv/bin/python",
-        Path(__file__).parent.parent.parent / "iotauth/entity/python/.venv/bin/python",
-        Path("/Users/krutyanjayshinde/Desktop/OPT_project/iotauth/entity/yolo_entity/.venv/bin/python"),
+        openpi_dir.parent / "iotauth/entity/yolo_entity/.venv/bin/python",
+        openpi_dir.parent / "iotauth/entity/python/.venv/bin/python",
     ]
     for venv_py in known_venvs:
         # Compare executable paths without resolving symlinks. A virtualenv's

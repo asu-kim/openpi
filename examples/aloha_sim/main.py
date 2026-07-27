@@ -71,13 +71,12 @@ def main(args: Args) -> None:
         host=args.host,
         port=args.port,
     )
-    
+
     if args.monitor_config:
-        import sys
-        sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
-        from openpi_monitor import ActionMonitor
-        from openpi_client.monitor_policy import MonitorPolicyWrapper
-        
+        from openpi_client.monitor_policy import MonitorPolicyWrapper  # noqa: PLC0415
+
+        from scripts.lamps_2026.openpi_monitor import ActionMonitor  # noqa: PLC0415
+
         logging.info(f"Initializing ActionMonitor with config: {args.monitor_config}")
         monitor = ActionMonitor(args.monitor_config, execution_horizon=args.action_horizon)
         policy_to_use = MonitorPolicyWrapper(base_policy, monitor)
@@ -85,7 +84,7 @@ def main(args: Args) -> None:
         policy_to_use = base_policy
 
     if secure_actuator_enabled:
-        from secure_remote_env import SecureRemoteAlohaEnvironment
+        from scripts.lamps_2026.secure_remote_env import SecureRemoteAlohaEnvironment  # noqa: PLC0415
 
         environment = SecureRemoteAlohaEnvironment(
             host=os.environ.get("SECURE_ACTUATOR_CONTROL_HOST", "127.0.0.1"),

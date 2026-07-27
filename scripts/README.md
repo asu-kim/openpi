@@ -1,284 +1,184 @@
-# OpenPI Automated Testing & Visualization Pipeline
+# OpenPI scripts
 
-This directory contains the automated test runner, log analyzer, and visualization engine used to evaluate the end-to-end security and latency performance of the $\pi_0$-FAST Vision-Language-Action (VLA) model when integrated with the **IoTAuth** secure action monitoring system (`openpi_monitor.py`).
+This directory contains the command-line entry points for preparing data, training models, serving policies, and supporting project workflows.
 
----
+Run commands from the repository root so that relative paths, configuration files, and output directories resolve correctly.
 
-## Table of Contents
-1. [Pipeline Architecture & Data Flow](#1-pipeline-architecture--data-flow)
-2. [Automated Test Runner (`run_tests.sh`)](#2-automated-test-runner-run_testssh)
-   - [Prerequisites & Directory Setup](#prerequisites--directory-setup)
-   - [Supported Test Regimes (Test 1, Test 2, Test 3)](#supported-test-regimes)
-   - [Command-Line Flags & Usage](#command-line-flags--usage)
-   - [Execution Workflow](#execution-workflow)
-3. [Latency Log Analyzer (`analyze_latency.py`)](#3-latency-log-analyzer-analyze_latencypy)
-4. [Aggregation & Plotting Engine (`plot_results.py`)](#4-aggregation--plotting-engine-plot_resultspy)
-   - [Test 1 & Test 2 Line Plots](#test-1--test-2-line-plots)
-   - [Test 3 2D Heatmaps & Shared Temperature Scaling](#test-3-2d-heatmaps--shared-temperature-scaling)
-   - [Command-Line Options](#command-line-options)
-5. [Supporting Training & Policy Scripts](#5-supporting-training--policy-scripts)
+## Research testing and analysis
 
----
+The latency experiments, report aggregation, and research plotting tools are documented separately to keep this general script guide focused.
 
-## 1. Pipeline Architecture & Data Flow
+See the [LAMPS 2026 VLA access-control testing guide](lamps_2026/README.md) for the monitor, actuator, test runner, result plotting, threshold calibration, and reproducibility commands.
 
-The testing pipeline orchestrates multi-run Docker simulations, captures fine-grained token timestamps, computes per-run latency metrics, and aggregates cross-condition results into publication-quality line graphs and 2D heatmaps.
+## Setup
 
-### End-to-End Execution Flow
-1. **Test Runner (`scripts/run_tests.sh`)** configures the environment, selects client configurations (`sst_config_creds/`), and launches the simulation inside Docker (`examples/aloha_sim/compose.yml`).
-2. **Action Monitor (`openpi_monitor.py`)** runs inside the container during inference, analyzing continuous ALOHA action chunks (`14D` bimanual trajectories).
-   - Calculates intra-chunk peak-to-peak motion and inter-chunk state displacement against `OPENPI_MOTION_THRESHOLD`.
-   - Classifies action chunks as **`SIGA`** (Significant Action / Active) or **`INSIGA`** (Insignificant Action / Still).
-   - Routes `SIGA` chunks through an encrypted IoTAuth secure channel (local or remote authentication server) and `INSIGA` chunks over a local plaintext socket.
-   - Logs exact timestamps (`monitor_actuator_ms`) for every action chunk to a `.jsonl` log file inside `data/aloha_sim/token_logs/`.
-3. **Log Analyzer (`scripts/analyze_latency.py`)** is automatically invoked by `run_tests.sh` after each iteration. It parses the raw `.jsonl` log, computes average and worst-case monitor latency, measures classification ratios (`SIGA` vs `INSIGA`), and writes a per-run `.txt` report file.
-4. **Plotter & Aggregator (`scripts/plot_results.py`)** runs once all test iterations finish. It parses all `.txt` report files in the output directory, builds summary CSVs, and generates comparative line charts (`.png`/`.pdf`) and 2D temperature heatmaps across local and remote authentication regimes.
-
-### Standardized Output Directory Structure
-All generated reports, logs, CSVs, and graphs are automatically organized under `test_reports/`:
-
-```text
-test_reports/
-├── test1/
-│   ├── local/
-│   │   └── 2026-07-20-10-30-00/
-│   │       ├── test_metadata.txt
-│   │       ├── val_1s_thresh_0.01_run_1.jsonl  # Archived raw token log
-│   │       ├── val_1s_thresh_0.01_run_1.txt    # Parsed latency summary report
-│   │       ├── ...
-│   │       ├── validity_vs_latency.csv         # Aggregated summary CSV
-│   │       └── test1_validity_vs_latency.png   # Single-mode line plot
-│   └── remote/
-│       └── 2026-07-20-11-00-00/
-│           ├── validity_vs_latency.csv
-│           └── test1_comparative_avg_latency.png # Auto-overlaid Local vs Remote plot
-├── test2/
-│   └── remote/
-│       └── active/                             # Separated by bypass-mode
-│           └── 2026-07-20-11-30-00/
-│               ├── threshold_vs_latency.csv
-│               └── test2_comparative_avg_latency.png
-└── test3/
-    ├── local/
-    │   └── 2026-07-20-12-00-00/
-    │       ├── validity_threshold_latency.csv
-    │       └── test3_local_validity_threshold_latency_heatmap.png
-    └── remote/
-        └── 2026-07-20-12-30-00/
-            ├── validity_threshold_latency.csv
-            └── test3_remote_validity_threshold_latency_heatmap.png # Shared scale
-```
-
----
-
-## 2. Automated Test Runner (`run_tests.sh`)
-
-`scripts/run_tests.sh` is the central orchestration script. It automates parameter sweeps across validity periods and motion thresholds, manages client cryptographic certificates, handles container lifecycles, and triggers automated analysis.
-
-### Prerequisites & Directory Setup
-- **Docker & Docker Compose**: Must be installed and running. The runner builds and runs `examples/aloha_sim/compose.yml`.
-- **IoTAuth Authentication Server (`../iotauth/`)**:
-  - **Local Mode (`--local`)**: `run_tests.sh` automatically runs `generateAll.sh` to create certificates and launches the local `Auth101` JAR in the background. You only need the `iotauth/` repository cloned alongside this repo (`../iotauth/`) and the server JAR built (`make` inside `../iotauth/auth/auth-server/`).
-  - **Remote Mode (`--remote`)**: `run_tests.sh` skips local certificate generation and server startup. You must manually start the remote `Auth101` server and generate/place credentials before running tests. For instructions on configuring the remote Auth server and generating credentials, see:
-    - **[IoTAuth Credential & Example Scripts](https://github.com/iotauth/iotauth/blob/main/examples/README.md)**
-- **Client Configurations & Credentials (`sst_config_creds/`)**: Before running tests (especially in remote mode), ensure that entity certificates, private keys, and server config files (`client_val_<val>.config`) are placed in the host directory:
-  ```text
-  sst_config_creds/
-  ├── local_auth/   # Automatically populated by run_tests.sh when using --local
-  │   └── testing/validity/val<1..120>/client_val_<val>.config
-  └── remote_auth/  # Must be populated manually when using --remote
-      └── testing/validity/val<1..120>/client_val_<val>.config
-  ```
-  The script mounts these configuration files into `/app/sst_config_creds/` inside the simulation container via the `MONITOR_CONFIG` environment variable.
-
-### Supported Test Regimes
-
-#### 1. Test 1 (`--test1`): Validity Period Sweep
-Evaluates how the IoTAuth session certificate **validity period** impacts average and worst-case monitor latency under a fixed motion threshold (`0.01`).
-- **Swept Validity Periods**: `1, 2, 5, 10, 30, 60, 120` seconds.
-- **Goal**: Measure re-authentication and session key handshake overhead when session keys expire rapidly (e.g., `1s`) versus when they remain valid for long windows (`120s`).
-
-#### 2. Test 2 (`--test2`): Motion Threshold Sweep
-Evaluates how the **motion threshold** (`OPENPI_MOTION_THRESHOLD`) impacts latency and classification rates (`SIGA` vs `INSIGA`) under a fixed certificate validity period (`1s`).
-- **Swept Motion Thresholds**: `0.0000, 0.0080, 0.0200, 0.1500, 0.6000`.
-- **Bypass Modes (`--bypass-mode still|active`)**:
-  - `still` (Default): Evaluates baseline operation where insignificant (`INSIGA`) action chunks bypass encryption.
-  - `active`: Evaluates performance behavior across active/still classification boundaries.
-- **Goal**: Quantify the trade-off between sensitivity to minor joint movements, the percentage of actions triggering cryptographic authentication, and end-to-end system latency.
-
-#### 3. Test 3 (`--test3`): 2D Parameter Grid Sweep
-Performs a comprehensive **$5 \times 5$ Cartesian grid evaluation** across both validity periods and motion thresholds to capture joint parameter interactions.
-- **Validity Periods**: `1, 2, 3, 4, 5` seconds.
-- **Motion Thresholds**: `0.0000, 0.0080, 0.0200, 0.1500, 0.6000`.
-- **Total Simulations**: $25 \text{ grid cells} \times N \text{ runs per cell}$ (e.g., $125$ total simulations for `--runs 5`).
-- **Goal**: Generate multi-dimensional latency heatmaps showing exactly how strict thresholds and aggressive re-authentication schedules interact across both average and worst-case scenarios.
-
-### Command-Line Flags & Usage
+Install the project and its development dependencies before running a script:
 
 ```bash
-# General Syntax
-./scripts/run_tests.sh --test1|--test2|--test3 --local|--remote [OPTIONS] [PLOT_FLAGS]
+GIT_LFS_SKIP_SMUDGE=1 uv sync
+GIT_LFS_SKIP_SMUDGE=1 uv pip install -e .
 ```
 
-| Flag | Required | Default | Description |
-| :--- | :---: | :---: | :--- |
-| `--test1`, `--test2`, `--test3` | Yes | — | Selects the target test regime to execute. |
-| `--local`, `--remote` | Yes | — | Selects the authentication mode (`local_auth` vs `remote_auth`). |
-| `--runs <n>` | No | `1` | Number of simulation iterations to run per parameter condition. |
-| `--password <pw>` | No | — | `sudo` password for container network/permission adjustments if required. |
-| `--bypass-mode <mode>` | No | `still` | Bypass mode for Test 1 and Test 2 (`still` or `active`). |
-| `--equidistant-x` | No | `False` | Forwarded to plotter: plots X-axis categories with uniform spacing. |
-| `--log-x` | No | `False` | Forwarded to plotter: plots Test 2 X-axis on base-10 logarithmic scale. |
-| `--log-y` | No | `False` | Forwarded to plotter: plots Y-axis (latency) on logarithmic scale. |
-| `--show-active-rate` | No | `False` | Forwarded to plotter: overlays `SIGA` classification rate percentage curve. |
-| `--show-still-rate` | No | `False` | Forwarded to plotter: overlays `INSIGA` classification rate percentage curve. |
-| `--aspect-1-1` / `--square` | No | `False` | Forwarded to plotter: forces square `1:1` aspect ratio on generated figures. |
-| `--no-title` | No | `False` | Forwarded to plotter: omits main chart title for clean publication insertion. |
+Use `uv run` for model preparation, training, serving, and development commands so that they run inside the managed project environment.
 
-#### Example Executions
+Most scripts expose their current options through `--help`:
+
 ```bash
-# Run 5 iterations of Test 1 under remote authentication
-./scripts/run_tests.sh --test1 --remote --runs 5
-
-# Run 5 iterations of Test 2 under local authentication with logarithmic X-axis plotting
-./scripts/run_tests.sh --test2 --local --runs 5 --log-x
-
-# Run a full 5x5 grid sweep for Test 3 under remote authentication without titles
-./scripts/run_tests.sh --test3 --remote --runs 5 --no-title
+uv run scripts/compute_norm_stats.py --help
+uv run scripts/serve_policy.py --help
 ```
 
-### Execution Workflow
-1. **Argument & Configuration Validation**: Parses CLI flags, verifies required configuration files for the requested validity periods exist on the host machine (`sst_config_creds/`), and initializes the timestamped output folder.
-2. **Metadata Archival**: Writes `test_metadata.txt` recording the test regime, auth mode, run counts, threshold values, secure actuator settings, and start timestamp.
-3. **Simulation Execution Loop (Steps 1–5)**:
-   - For each parameter combination (validity period and/or threshold) and run iteration ($1 \dots N$):
-     - Exports target environment variables (`MONITOR_CONFIG`, `OPENPI_MOTION_THRESHOLD`, `TEST_VALIDITY_PERIOD`, `TEST_RUN_ITERATION`, `TEST_TOTAL_RUNS`).
-     - Launches `docker compose -f examples/aloha_sim/compose.yml up --build --abort-on-container-exit`.
-     - Detects newly generated `.jsonl` token logs in `data/aloha_sim/token_logs/` upon container exit and copies them into the run output directory.
-     - Invokes `python3 scripts/analyze_latency.py` on the fresh log file to generate `val_<val>s_thresh_<thresh>_run_<run>.txt`.
-4. **Automated Aggregation & Plotting (Step 6)**:
-   - Automatically checks if an opposite authentication mode run (`local` vs `remote`) with identical parameters and metadata (`metadata_is_compatible`) already exists.
-   - If a compatible run exists, automatically passes `--compare-csv "$OTHER_CSV"` to `plot_results.py` so that comparative overlays and shared-scale heatmaps are generated immediately.
+## Script index
 
----
+| Script | Purpose |
+| --- | --- |
+| [`compute_norm_stats.py`](compute_norm_stats.py) | Computes state and action normalization statistics for a training configuration |
+| [`train.py`](train.py) | Trains an OpenPI model with JAX |
+| [`train_pytorch.py`](train_pytorch.py) | Trains an OpenPI model with PyTorch and supports distributed training |
+| [`serve_policy.py`](serve_policy.py) | Loads a default or trained policy and exposes it through a WebSocket server |
+| [`lamps_2026/`](lamps_2026/) | Contains the LAMPS 2026 monitor, actuator, testing, and plotting workflow |
+| [`docker/`](docker/) | Contains the policy-server image, Compose configuration, and host setup helpers |
 
-## 3. Latency Log Analyzer (`analyze_latency.py`)
+Files ending in `_test.py` are automated tests, not command-line workflows.
 
-`scripts/analyze_latency.py` is a standalone analysis tool invoked after each simulation run to parse raw JSONL token logs.
+Run them with pytest:
 
-### Usage
 ```bash
-python3 scripts/analyze_latency.py <path_to_token_log.jsonl> [-o <output_report.txt>]
+uv run pytest scripts
 ```
 
-### Metrics Processed
-The analyzer scans every action chunk entry inside the `.jsonl` file and extracts:
-- **`monitor_actuator_ms`**: Measured elapsed time in milliseconds from when the action chunk enters the monitor to when the verified action reaches the actuator boundary.
-- **Classification Counts (`SIGA` vs `INSIGA`)**: Counts how many chunks required secure authentication (`SIGA`) versus how many bypassed encryption as idle/insignificant motion (`INSIGA`).
-- **Average & Worst-Case Latency**: Computes the arithmetic mean and peak (`max`) monitor latency across the entire episode.
-- **Active / Still Rates**: Calculates the exact percentage of total chunks classified as `SIGA` ($\text{Active Rate} = \frac{N_{\text{SIGA}}}{N_{\text{total}}} \times 100\%$) and `INSIGA` ($\text{Still Rate} = \frac{N_{\text{INSIGA}}}{N_{\text{total}}} \times 100\%$).
+## Model preparation and training
 
-### Sample Output Report (`.txt`)
-```text
-================================================================================
-TOKEN LOG LATENCY ANALYSIS REPORT
-================================================================================
-Log File Name           : val_1s_thresh_0.0080_run_1.jsonl
-Total Records Analyzed  : 300
-Active Records (SIGA)   : 245 (81.67%)
-Still Records (INSIGA)  : 55 (18.33%)
---------------------------------------------------------------------------------
-Average Monitor Latency : 36.6260 ms
-Worst-Case Latency      : 119.4000 ms
-================================================================================
-```
+### Compute normalization statistics
 
----
+Training configurations are defined in [`src/openpi/training/config.py`](../src/openpi/training/config.py).
 
-## 4. Aggregation & Plotting Engine (`plot_results.py`)
+Compute statistics after adding a dataset and training configuration:
 
-`scripts/plot_results.py` is a powerful Python plotting engine built on `matplotlib`. It can be run automatically via `run_tests.sh` or executed standalone against any existing test report directory.
-
-### Standalone Invocation Syntax
 ```bash
-python3 scripts/plot_results.py --reports-dir path/to/test_reports/<test>/<mode>/<timestamp> [OPTIONS]
+uv run scripts/compute_norm_stats.py --config-name pi05_libero
 ```
 
-### Test 1 & Test 2 Line Plots
-When processing Test 1 or Test 2 directories, `plot_results.py`:
-1. **Aggregates Multi-Run Data**: Averages metrics across all $N$ run iterations per condition (`val_*_run_*.txt`), calculating both arithmetic mean and peak worst-case latency across runs.
-2. **Summary CSV Generation**: Outputs `validity_vs_latency.csv` (Test 1) or `threshold_vs_latency.csv` (Test 2) containing exact tabulated values for external analysis.
-3. **Automatic Mode Overlay (`--compare-csv`)**:
-   - If `--compare-csv <other_csv>` is passed (or auto-discovered via `discover_compare_csv`), `plot_results.py` generates comparative overlay line plots (`test1_comparative_avg_latency.png` / `.pdf` and `test1_comparative_wc_latency.png` / `.pdf`).
-   - Clearly contrasts **Local Auth (Decentralized)** versus **Remote Auth (Centralized)** curves on the same axes.
-4. **Collision-Aware Legend Positioning**: Automatically arranges and stacks legend boxes using `position_collision_aware_legends()`, ensuring Centralized (Remote) entries consistently stack above Decentralized (Local) entries without obscuring data curves.
-5. **Secondary Y-Axis Classification Rates**:
-   - Passing `--show-active-rate` or `--show-still-rate` adds a right-hand Y-axis (`0%` to `100%`) showing the exact percentage of `SIGA` or `INSIGA` chunks at each threshold or validity period.
+The script processes the configured dataset and writes `norm_stats.json` beneath the configuration's assets directory.
 
-#### X-Axis Scaling Transforms (Test 2)
-Because Test 2 sweeps motion thresholds across several orders of magnitude (`0.0000` to `0.6000`), `plot_results.py` provides versatile coordinate transformations:
-- **Linear (`default`)**: True proportional numerical spacing along the X-axis.
-- **Logarithmic (`--log-x`)**: Base-10 logarithmic scaling. Zero values (`0.0000`) are mapped to `0.0001` (`LOG_X_ZERO_FLOOR`) while preserving their original `"0"` text label.
-- **Equidistant (`--equidistant-x`)**: Categorical spacing where each threshold label is spaced uniformly across the X-axis regardless of numerical gaps.
-- **Hybrid (`--hybrid-x`)**: Blended transformation mapping early dense thresholds linearly and larger thresholds logarithmically to balance visual clarity across both regimes.
+For a faster development pass, limit the number of dataset frames:
 
-### Test 3 2D Heatmaps & Shared Temperature Scaling
-When invoked on a Test 3 directory (`--test-name test3`), `plot_results.py` constructs a $5 \times 5$ grid matrix over Validity Periods ($\text{columns} = 1, 2, 3, 4, 5\text{s}$) and Motion Thresholds ($\text{rows} = 0, 0.008, 0.02, 0.15, 0.6$).
+```bash
+uv run scripts/compute_norm_stats.py \
+    --config-name pi05_libero \
+    --max-frames 10000
+```
 
-#### Heatmap Generation & Cell Labels
-- Renders two distinct heatmaps: **Average Monitor Latency** (`test3_<mode>_validity_threshold_latency_heatmap.png`) and **Worst-Case Monitor Latency** (`test3_<mode>_validity_threshold_wc_latency_heatmap.png`).
-- Uses the `RdYlGn_r` (Red-Yellow-Green reversed) colormap, where low latencies appear cool/green and high latencies appear bright red.
-- Dynamically computes cell text luminance (`luminance = 0.2126*R + 0.7152*G + 0.0722*B`) to automatically switch numeric label font color between bold black and white for optimal readability.
-- Outputs a comprehensive tabular text summary (`validity_threshold_latency_report.txt`) and `validity_threshold_latency.csv`.
+Recompute these statistics whenever the state representation, action representation, or training data distribution changes.
 
-#### Shared Temperature Scaling (`vmin` / `vmax`)
-By default, standalone heatmaps normalize their colorbar across the minimum (`vmin`) and maximum (`vmax`) latency values inside that single matrix. However, when comparing Local Auth vs Remote Auth heatmaps, independent normalization distorts color perception (e.g., `80 ms` might appear deep red in a Local run but yellow in a Remote run where the peak reaches `210 ms`).
+### Train with JAX
 
-When `plot_results.py` is provided a comparison CSV (`--compare-csv <path>` or via auto-discovery):
-1. Reads both `primary_csv` (e.g., Local) and `compare_csv` (e.g., Remote).
-2. Computes the **global minimum (`vmin`)** and **global maximum (`vmax`)** latency across **both datasets simultaneously**:
-   $$\text{vmin}_{\text{global}} = \min(\text{values}_{\text{local}} \cup \text{values}_{\text{remote}}), \quad \text{vmax}_{\text{global}} = \max(\text{values}_{\text{local}} \cup \text{values}_{\text{remote}})$$
-3. Passes $\text{vmin}_{\text{global}}$ and $\text{vmax}_{\text{global}}$ to `ax.imshow()`.
-4. Automatically renders and updates the heatmaps in **both** the primary run folder (`test_reports/test3/<mode>/<timestamp>/`) and the comparison run folder with the synchronized temperature scale, guaranteeing exact side-by-side comparability.
+Start a JAX training run by passing a configuration name and a unique experiment name:
 
-### Command-Line Options (`plot_results.py`)
+```bash
+XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 \
+uv run scripts/train.py pi05_libero \
+    --exp-name=my_experiment \
+    --overwrite
+```
 
-| Argument | Description |
-| :--- | :--- |
-| `--reports-dir <path>` | Required. Directory containing per-run `.txt` report files or existing summary CSVs. |
-| `--output-dir <path>` | Target directory for generated CSVs and plots (defaults to `--reports-dir`). |
-| `--test-name <name>` | Force test identification (`test1`, `test2`, `test3`). Auto-inferred if omitted. |
-| `--compare-csv <path>` | Explicit path to opposite mode summary CSV (`validity_vs_latency.csv`, etc.) for overlays or shared scale. |
-| `--no-auto-compare` | Disables automatic discovery of opposite authentication mode runs (`discover_compare_csv`). |
-| `--bypass-mode <mode>` | Bypass mode label for plot subtitle (`still` vs `active`). Defaults to `still`. |
-| `--equidistant-x` | Spacings categories evenly along the X-axis (`Test 1` and `Test 2`). |
-| `--log-x` | Uses base-10 logarithmic spacing on the X-axis (`Test 2` threshold sweeps). |
-| `--log-y` | Uses base-10 logarithmic spacing on the Y-axis (`Test 1` and `Test 2`). |
-| `--hybrid-x` | Uses blended hybrid linear-logarithmic spacing on the X-axis (`Test 2`). |
-| `--show-active-rate` | Overlays secondary right-hand Y-axis showing percentage of `SIGA` chunks. |
-| `--show-still-rate` | Overlays secondary right-hand Y-axis showing percentage of `INSIGA` chunks. |
-| `--aspect-1-1` / `--square` | Forces exact `1:1` square figure aspect ratio across generated plots. |
-| `--no-title` | Omits main chart figure titles (`fig.suptitle`) for clean LaTeX document inclusion. |
+Checkpoints are written under `checkpoints/<config-name>/<exp-name>/`.
 
----
+Use `--resume` to continue an existing run and `--overwrite` only when replacing an existing checkpoint directory is intentional.
 
-## 5. Supporting Training & Policy Scripts
+The training configuration controls data loading, model initialization, checkpoint intervals, device sharding, and Weights & Biases logging.
 
-In addition to the evaluation pipeline, `scripts/` houses core scripts for training, profiling, and serving Vision-Language-Action policies:
+### Train with PyTorch
 
-### `train.py` & `train_pytorch.py`
-- Entry points for fine-tuning and pre-training OpenPI models ($\pi_0$, $\pi_0$-FAST, $\pi_{0.5}$).
-- `train.py` leverages JAX/Flax with distributed data parallelism and LeRobot/DROID dataset loaders.
-- `train_pytorch.py` provides native PyTorch training support with Fully Sharded Data Parallelism (`FSDP`), LoRA fine-tuning, and multi-GPU synchronization.
+Run single-process PyTorch training with:
 
-### `serve_policy.py`
-- High-performance inference policy server.
-- Exposes a network socket/WebSocket interface allowing remote robot platforms or simulation instances (`aloha_sim`, `ur5`, `libero`) to stream visual observations and proprioceptive state and receive real-time decoded continuous action chunks or FAST tokens.
+```bash
+uv run scripts/train_pytorch.py debug \
+    --exp_name pytorch_test
+```
 
-### `compute_norm_stats.py`
-- Utility script to compute and normalize joint trajectories, action bounds, and proprioceptive statistics over custom robotic training datasets before fine-tuning.
-- Outputs normalization quantile dictionaries consumed by the policy wrapper during action decoding.
+Resume the latest checkpoint for the same configuration and experiment with:
 
-### `test_validity_latency.py` & `profile_entropy_quantiles.py`
-- `test_validity_latency.py`: Standalone test harness for measuring cryptographic certificate verification delays across varying X.509/IoTAuth validity window configurations without running full Docker VLA simulations.
-- `profile_entropy_quantiles.py`: Profiling script used during the research and design phase of `openpi_monitor.py` to analyze information-theoretic entropy distributions across ALOHA action trajectories and establish baseline classification boundaries.
+```bash
+uv run scripts/train_pytorch.py debug \
+    --exp_name pytorch_test \
+    --resume
+```
+
+For multi-GPU training on one node, launch the script through `torchrun`:
+
+```bash
+uv run torchrun \
+    --standalone \
+    --nnodes=1 \
+    --nproc_per_node=2 \
+    scripts/train_pytorch.py pi0_aloha_sim \
+    --exp_name pytorch_ddp_test
+```
+
+For multi-node training, provide `--nnodes`, `--node_rank`, `--master_addr`, and `--master_port` to `torchrun`.
+
+Each node must use the same training configuration and have access to the same dataset and checkpoint storage.
+
+## Serve a policy
+
+Serve the default policy for a supported environment on port 8000:
+
+```bash
+uv run scripts/serve_policy.py --env libero
+```
+
+Supported environments are `aloha`, `aloha_sim`, `droid`, and `libero`.
+
+Serve a specific trained checkpoint with:
+
+```bash
+uv run scripts/serve_policy.py policy:checkpoint \
+    --policy.config=pi05_libero \
+    --policy.dir=checkpoints/pi05_libero/my_experiment/20000
+```
+
+Useful server options include:
+
+- `--port <port>` changes the listening port.
+- `--default-prompt <text>` supplies a prompt when an observation does not contain one.
+- `--record` writes policy inputs and outputs to `policy_records/` for debugging.
+
+The server binds to all interfaces.
+
+Review firewall and network exposure before serving a policy outside a trusted machine.
+
+See [`docs/remote_inference.md`](../docs/remote_inference.md) for client integration guidance.
+
+## Docker policy server
+
+Build and start the policy server through Compose:
+
+```bash
+SERVER_ARGS="policy:checkpoint --policy.config=pi05_libero --policy.dir=/path/to/checkpoint" \
+docker compose -f scripts/docker/compose.yml up --build
+```
+
+The Compose service mounts the repository at `/app`, mounts the OpenPI asset cache at `/openpi_assets`, uses host networking, and requests one NVIDIA GPU by default.
+
+Edit or override the GPU reservation when running on a host without an NVIDIA GPU.
+
+The Docker helpers are:
+
+- [`docker/serve_policy.Dockerfile`](docker/serve_policy.Dockerfile) builds the policy-server image.
+- [`docker/compose.yml`](docker/compose.yml) defines the local server service.
+- [`docker/install_docker_ubuntu22.sh`](docker/install_docker_ubuntu22.sh) installs Docker on Ubuntu 22.04.
+- [`docker/install_nvidia_container_toolkit.sh`](docker/install_nvidia_container_toolkit.sh) installs NVIDIA container runtime support.
+
+Review installation scripts before running them because they modify host package repositories, services, and user groups.
+
+For broader Docker setup and troubleshooting, see [`docs/docker.md`](../docs/docker.md).
+
+## Related documentation
+
+- [`README.md`](../README.md) covers installation, checkpoints, fine-tuning, and inference.
+- [`lamps_2026/README.md`](lamps_2026/README.md) covers the research monitor, actuator, testing, and plotting workflow.
+- [`docs/norm_stats.md`](../docs/norm_stats.md) explains normalization-stat reuse.
+- [`docs/remote_inference.md`](../docs/remote_inference.md) describes policy-server clients.
+- [`openpi_monitor_README.md`](../openpi_monitor_README.md) documents the secure action monitor.
+- [`secure_architecture_design.md`](../secure_architecture_design.md) describes the monitor and actuator architecture.

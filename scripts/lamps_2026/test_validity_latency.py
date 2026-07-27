@@ -10,7 +10,7 @@ to plot_results.py.
 For re-generating graphs from existing report files without re-running the
 simulation, use plot_results.py directly:
 
-    python scripts/plot_results.py \\
+    python scripts/lamps_2026/plot_results.py \\
         --reports-dir test_reports/test1/local/2026-07-06-10-38-00 \\
         --test-name test1 --auth-mode local
 """
@@ -68,7 +68,7 @@ def run_single_iteration(validity_sec: float, run_idx: int, args: argparse.Names
             return None
 
         print(f"Running ActionMonitor offline analysis over log: {log_path}")
-        monitor_script = openpi_dir / "openpi_monitor.py"
+        monitor_script = Path(__file__).parent / "openpi_monitor.py"
         cmd_list = [
             sys.executable, str(monitor_script),
             "--config-file", args.config_file,
@@ -88,7 +88,7 @@ def run_single_iteration(validity_sec: float, run_idx: int, args: argparse.Names
         print("❌ Error: Could not locate token log file after test run.")
         return None
 
-    analyze_script = openpi_dir / "scripts/analyze_latency.py"
+    analyze_script = Path(__file__).parent / "analyze_latency.py"
     report_file = openpi_dir / f"latency_reports/temp_report_val_{validity_sec}s_run_{run_idx}.txt"
     report_file.parent.mkdir(exist_ok=True)
 
@@ -140,7 +140,7 @@ def main():
                         help="Auth mode reflected in plot title and filenames (local or remote).")
     args = parser.parse_args()
 
-    openpi_dir = Path(__file__).parent.parent.resolve()
+    openpi_dir = Path(__file__).resolve().parents[2]
 
     # Verify config file exists or fall back to host path
     config_path = Path(args.config_file)

@@ -1,6 +1,6 @@
 import json
 
-from scripts import analyze_latency
+from scripts.lamps_2026 import analyze_latency
 
 
 def test_analyzer_reports_monitor_actuator_latency(tmp_path):

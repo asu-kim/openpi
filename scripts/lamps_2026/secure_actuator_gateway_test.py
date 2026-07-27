@@ -4,7 +4,8 @@ import time
 import numpy as np
 from openpi_client.secure_action_protocol import encode_action_chunk
 import pytest
-from secure_actuator_gateway import SecureActuatorGateway
+
+from scripts.lamps_2026.secure_actuator_gateway import SecureActuatorGateway
 
 
 def payload(record_id, *, label="insiga", horizon=10, monitor_start_ms=None):
